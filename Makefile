@@ -1,5 +1,5 @@
 GOTOOLS := github.com/Masterminds/glide \
-					 github.com/alecthomas/gometalinter
+					 github.com/alecthomas/gometalinter \
 
 PACKAGES := $(shell glide novendor)
 
@@ -9,13 +9,14 @@ all: ensure_tools get_vendor_deps test linter install
 install:
 	@echo "--> Running go install"
 	go install --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/tendermint/tendermint/version.GitCommit=`git rev-parse HEAD`" \
+		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
 		./cmd/tendereum
 
 build:
 	@echo "--> Running go build --race"
+	rm -rf build/tendereum
 	go build --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/tendermint/tendermint/version.GitCommit=`git rev-parse HEAD`" \
+		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
 		-race -o build/tendereum ./cmd/tendereum
 
 run: build
@@ -39,6 +40,10 @@ get_vendor_deps:
 
 update_deps:
 	glide up
+
+release:
+	go get github.com/goreleaser/goreleaser
+	goreleaser
 
 ensure_tools:
 	go get $(GOTOOLS)

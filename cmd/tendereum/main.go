@@ -20,8 +20,8 @@ func main() {
 	abciPtr := flag.String("abci", "socket", "ABCI server: socket | grpc")
 	flag.Parse()
 
-	app := app.NewTendereumApplication()
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+	app := app.NewTendereumApplication(logger.With("module", "tendereum-application"))
 
 	// Start the listener
 	srv, err := server.NewServer(*addrPtr, *abciPtr, app)
