@@ -1,43 +1,45 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"os"
 
-	"github.com/tendermint/abci/server"
+	"github.com/tendermint/tmlibs/cli"
 
-	"github.com/tendermint/tmlibs/common"
-	"github.com/tendermint/tmlibs/log"
-
-	"github.com/adrianbrink/tendereum/app"
+	"github.com/adrianbrink/tendereum/cmd/tendereum/commands"
 )
 
 func main() {
-	fmt.Println("Tendereum has started.")
+	rootCmd := commands.RootCmd
+	rootCmd.AddCommand(
+		commands.MainnetCmd,
+		commands.TestnetCmd,
+		commands.DevelopmentCmd,
+		commands.VersionCmd,
+	)
 
-	addrPtr := flag.String("addr", "tcp://0.0.0.0:46658", "Listen address")
-	abciPtr := flag.String("abci", "socket", "ABCI server: socket | grpc")
-	flag.Parse()
+	cmd := cli.PrepareBaseCmd(rootCmd, "TE", os.ExpandEnv("$HOME/.tendereum"))
+	cmd.Execute()
 
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-	app := app.NewTendereumApplication(logger.With("module", "tendereum-application"))
+	/*
+		fmt.Println("Tendereum has started.")
 
-	// Start the listener
-	srv, err := server.NewServer(*addrPtr, *abciPtr, app)
-	if err != nil {
-		logger.Error(err.Error())
-		os.Exit(1)
-	}
-	srv.SetLogger(logger.With("module", "abci-server"))
-	if _, err := srv.Start(); err != nil {
-		logger.Error(err.Error())
-		os.Exit(1)
-	}
+		addrPtr := flag.String("addr", "tcp://0.0.0.0:46658", "Listen address")
+		abciPtr := flag.String("abci", "socket", "ABCI server: socket | grpc")
+		flag.Parse()
 
-	// Wait forever
-	common.TrapSignal(func() {
-		// Cleanup
-		srv.Stop()
-	})
+		logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+		app := app.NewTendereumApplication(logger.With("module", "tendereum-application"))
+
+		// Start the listener
+		srv, err := server.NewServer(*addrPtr, *abciPtr, app)
+		if err != nil {
+			logger.Error(err.Error())
+			os.Exit(1)
+		}
+		srv.SetLogger(logger.With("module", "abci-server"))
+		if _, err := srv.Start(); err != nil {
+			logger.Error(err.Error())
+			os.Exit(1)
+		}
+	*/
 }
