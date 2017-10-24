@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -46,7 +47,9 @@ var _ types.Application = (*TendereumApplication)(nil)
 // NewTendereumApplication returns a new instance of a Tendereum application.
 // NOTE: Pass in a config struct which allows the specification of a chain-id. The signer needs the
 // chain-id in order to provide replay protection.
+// TODO: Pass in a config struct to provide the home directory.
 func NewTendereumApplication(chainConfig params.ChainConfig, logger log.Logger) *TendereumApplication {
+
 	return &TendereumApplication{
 		// should set almost all options to 1 except for chain-id
 		// needs to ensure that chain-id is unique and doesn't conflict with other current
@@ -180,20 +183,29 @@ func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
 	}
 
 	evm := vm.NewEVM(context, ta.was.state, &ta.chainConfig, ta.vmConfig)
-	// the third value is whether the transition failed. It is allowed to fail since we might
-	// have potentially invalid messages in a block.
 	// NOTE: This deducts gas and credits it to the defined coinbase.
-	_, gas, _, err := core.ApplyMessage(evm, msg, ta.was.gasPool)
+	_, gas, failed, err := core.ApplyMessage(evm, msg, ta.was.gasPool)
 	if err != nil {
 		return types.ErrInternalError
 	}
 
+	ta.was.state.Finalise(true)
+
 	ta.was.totalUsedGas.Add(ta.was.totalUsedGas, gas)
 
-	receipt := ethTypes.NewReceipt(s., failed bool, cumulativeGasUsed *big.Int)
+	// since Byzantium the root hash of a receipt is empty
+	var root []byte
+	receipt := ethTypes.NewReceipt(root, failed, ta.was.totalUsedGas)
+	receipt.TxHash = tx.Hash()
+	receipt.GasUsed = new(big.Int).Set(gas)
+	if msg.To() == nil {
+		receipt.ContractAddress = crypto.CreateAddress(evm.Context.Origin, tx.Nonce())
+	}
 
-	res = types.Result{Code: types.CodeType_OK, Log: "Not yet implemented."}
-	return res
+	receipt.Logs = ta.was.state.GetLogs(tx.Hash())
+	receipt.Bloom = ethTypes.CreateBloom(ethTypes.Receipts{receipt})
+
+	return types.Result{Code: types.CodeType_OK}
 }
 
 // EndBlock is called to signal the end of the current block. It is called after all transactions
