@@ -5,7 +5,7 @@ import (
 
 	"github.com/tendermint/tmlibs/cli"
 
-	"github.com/cosmos/tendereum/cmd/tendereum/commands"
+	"github.com/adrianbrink/tendereum/cmd/tendereum/commands"
 )
 
 func main() {
