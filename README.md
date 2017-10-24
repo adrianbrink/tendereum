@@ -38,3 +38,7 @@
                                     v
                                 Consensus
 ```
+
+## Staking
+* currently gas gets credited to the coinbase
+* block rewards should be distributed equally across all validators

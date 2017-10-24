@@ -5,8 +5,13 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/tendermint/abci/types"
@@ -23,7 +28,15 @@ const (
 type TendereumApplication struct {
 	types.BaseApplication
 
-	signer ethTypes.Signer
+	db  ethdb.Database
+	was *writeAheadState
+
+	checkTxState *state.StateDB
+
+	chainConfig params.ChainConfig // evm tighly coupled to chainConfig
+	vmConfig    vm.Config
+	signer      ethTypes.Signer
+
 	logger log.Logger
 }
 
@@ -33,11 +46,28 @@ var _ types.Application = (*TendereumApplication)(nil)
 // NewTendereumApplication returns a new instance of a Tendereum application.
 // NOTE: Pass in a config struct which allows the specification of a chain-id. The signer needs the
 // chain-id in order to provide replay protection.
-func NewTendereumApplication(logger log.Logger) *TendereumApplication {
+func NewTendereumApplication(chainConfig params.ChainConfig, logger log.Logger) *TendereumApplication {
 	return &TendereumApplication{
+		// should set almost all options to 1 except for chain-id
+		// needs to ensure that chain-id is unique and doesn't conflict with other current
+		// networks.
+		chainConfig: chainConfig,
+		// TODO: Should be settable in order to enable EVM jit.
+		vmConfig: vm.Config{Tracer: vm.NewStructLogger(nil)},
+		// EIP155 signer implements replay attack by including the chain-id in the signature
+		signer: ethTypes.NewEIP155Signer(chainConfig.ChainId),
 		logger: logger,
-		signer: ethTypes.NewEIP155Signer(big.NewInt(1)),
 	}
+}
+
+type writeAheadState struct {
+	state        *state.StateDB
+	txIndex      int
+	transactions []*ethTypes.Transaction
+	receipts     ethTypes.Receipts
+	allLogs      []*ethTypes.Log
+	totalUsedGas *big.Int
+	gasPool      *core.GasPool
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -87,16 +117,16 @@ func (ta *TendereumApplication) CheckTx(data []byte) types.Result {
 		return types.ErrInternalError
 	}
 
-	_, err = ethTypes.Sender(ta.signer, tx)
+	from, err := ethTypes.Sender(ta.signer, tx)
 	if err != nil {
 		return types.ErrUnauthorized
 	}
 
-	if ta.currentState.GetNonce(from)+1 != tx.Nonce() {
+	if ta.checkTxState.GetNonce(from)+1 != tx.Nonce() {
 		return types.ErrBadNonce
 	}
 
-	if ta.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+	if ta.checkTxState.GetBalance(from).Cmp(tx.Cost()) < 0 {
 		return types.ErrInsufficientFunds
 	}
 
@@ -106,15 +136,14 @@ func (ta *TendereumApplication) CheckTx(data []byte) types.Result {
 		return types.ErrInternalError
 	}
 
-	return types.Result{Code: types.CodeType_OK}
-}
-
-func decodeTx(data []byte) (*ethTypes.Transaction, error) {
-	var tx ethTypes.Transaction
-	if err := rlp.Decode(bytes.NewReader(data), &tx); err != nil {
-		return nil, err
+	// update current state to allow multiple transactions per block
+	ta.checkTxState.SubBalance(from, tx.Cost())
+	if to := tx.To(); to != nil {
+		ta.checkTxState.AddBalance(*to, tx.Value())
 	}
-	return &tx, nil
+	ta.checkTxState.SetNonce(from, tx.Nonce()+1)
+
+	return types.Result{Code: types.CodeType_OK}
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -130,7 +159,39 @@ func (ta *TendereumApplication) BeginBlock(req types.RequestBeginBlock) {
 }
 
 // DeliverTx delivers transactions that have been included in a finalised block.
-func (ta *TendereumApplication) DeliverTx(tx []byte) (res types.Result) {
+// Updates the state
+func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
+	var tx ethTypes.Transaction
+	if err := rlp.Decode(bytes.NewReader(data), &tx); err != nil {
+		return types.ErrBaseEncodingError
+	}
+
+	msg, err := tx.AsMessage(ta.signer)
+	if err != nil {
+		return types.ErrInternalError
+	}
+
+	context := vm.Context{
+		CanTransfer: core.CanTransfer,
+		Transfer:    core.Transfer,
+		GetHash:     func(uint64) common.Hash { return common.Hash{} },
+		Origin:      msg.From(),
+		GasPrice:    msg.GasPrice(),
+	}
+
+	evm := vm.NewEVM(context, ta.was.state, &ta.chainConfig, ta.vmConfig)
+	// the third value is whether the transition failed. It is allowed to fail since we might
+	// have potentially invalid messages in a block.
+	// NOTE: This deducts gas and credits it to the defined coinbase.
+	_, gas, _, err := core.ApplyMessage(evm, msg, ta.was.gasPool)
+	if err != nil {
+		return types.ErrInternalError
+	}
+
+	ta.was.totalUsedGas.Add(ta.was.totalUsedGas, gas)
+
+	receipt := ethTypes.NewReceipt(s., failed bool, cumulativeGasUsed *big.Int)
+
 	res = types.Result{Code: types.CodeType_OK, Log: "Not yet implemented."}
 	return res
 }
@@ -143,7 +204,19 @@ func (ta *TendereumApplication) EndBlock(height uint64) (res types.ResponseEndBl
 }
 
 // Commit is called to obtain a unique state root for inclusion in the next Tendermint Core block.
+// Writes all the changes to the state from DeliverTx to the underlying database.
 func (ta *TendereumApplication) Commit() (res types.Result) {
 	res = types.Result{Code: types.CodeType_OK, Log: "Not yet implemented."}
 	return res
+}
+
+// ------------------------------------------------------------------------------------------------
+// Helpers
+
+func decodeTx(data []byte) (*ethTypes.Transaction, error) {
+	var tx ethTypes.Transaction
+	if err := rlp.Decode(bytes.NewReader(data), &tx); err != nil {
+		return nil, err
+	}
+	return &tx, nil
 }
