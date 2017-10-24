@@ -2,8 +2,11 @@ package commands
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/tendermint/tmlibs/common"
 
 	"github.com/adrianbrink/tendereum/app"
 )
@@ -21,5 +24,22 @@ necessary processes.`)
 
 	app := app.NewTendereumApplication(logger)
 
-	startTendereum(app)
+	srv, err := startTendereum(app)
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+
+	n, err := startTendermint()
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+
+	// Wait forever
+	common.TrapSignal(func() {
+		// Cleanup
+		srv.Stop()
+		n.Stop()
+	})
 }
