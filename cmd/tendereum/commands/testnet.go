@@ -14,6 +14,6 @@ var TestnetCmd = &cobra.Command{
 }
 
 func connectTestnet(cmd *cobra.Command, args []string) {
-	fmt.Println(`Should initialise all files for Tendermint and Tendereum and start all
-                     necessary processes.`)
+	fmt.Println(`Should initialise all files for Tendermint and Tendereum and start all 
+necessary processes.`)
 }

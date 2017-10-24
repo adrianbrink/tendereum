@@ -48,7 +48,20 @@ var _ types.Application = (*TendereumApplication)(nil)
 // NOTE: Pass in a config struct which allows the specification of a chain-id. The signer needs the
 // chain-id in order to provide replay protection.
 // TODO: Pass in a config struct to provide the home directory.
-func NewTendereumApplication(chainConfig params.ChainConfig, logger log.Logger) *TendereumApplication {
+func NewTendereumApplication(logger log.Logger) *TendereumApplication {
+
+	chainConfig := params.ChainConfig{
+		ChainId:        big.NewInt(1),
+		HomesteadBlock: new(big.Int),
+		DAOForkBlock:   new(big.Int),
+		DAOForkSupport: true,
+		EIP150Block:    new(big.Int),
+		EIP150Hash:     common.Hash{},
+		EIP155Block:    new(big.Int),
+		EIP158Block:    new(big.Int),
+		ByzantiumBlock: new(big.Int),
+		Ethash:         new(params.EthashConfig),
+	}
 
 	return &TendereumApplication{
 		// should set almost all options to 1 except for chain-id
