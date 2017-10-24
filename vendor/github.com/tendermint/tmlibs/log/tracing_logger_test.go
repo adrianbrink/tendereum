@@ -14,7 +14,8 @@ import (
 func TestTracingLogger(t *testing.T) {
 	var buf bytes.Buffer
 
-	logger := log.NewTMJSONLogger(&buf)
+	var logger log.Logger
+	logger = log.NewTMJSONLogger(&buf)
 
 	logger1 := log.NewTracingLogger(logger)
 	err1 := errors.New("Courage is grace under pressure.")

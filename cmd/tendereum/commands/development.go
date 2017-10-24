@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/adrianbrink/tendereum/app"
+	"github.com/cosmos/tendereum/app"
 )
 
 // DevelopmentCmd initialises all files and connects to a local development net.

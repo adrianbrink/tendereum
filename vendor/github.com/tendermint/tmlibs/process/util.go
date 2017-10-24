@@ -15,8 +15,8 @@ func Run(dir string, command string, args []string) (string, bool, error) {
 	<-proc.WaitCh
 
 	if proc.ExitState.Success() {
-		return outFile.String(), true, nil
+		return string(outFile.Bytes()), true, nil
 	} else {
-		return outFile.String(), false, nil
+		return string(outFile.Bytes()), false, nil
 	}
 }

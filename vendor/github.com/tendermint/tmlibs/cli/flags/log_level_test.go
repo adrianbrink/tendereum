@@ -49,6 +49,8 @@ func TestParseLogLevel(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		logger = logger
+
 		buf.Reset()
 
 		logger.With("module", "wire").Debug("Kingpin")

@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/adrianbrink/tendereum/version"
+	"github.com/cosmos/tendereum/version"
 )
 
 // VersionCmd prints the version of Tendereum

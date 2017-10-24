@@ -21,7 +21,7 @@ func (se StackError) Error() string {
 // panic wrappers
 
 // A panic resulting from a sanity check means there is a programmer error
-// and some guarantee is not satisfied.
+// and some gaurantee is not satisfied.
 func PanicSanity(v interface{}) {
 	panic(Fmt("Panicked on a Sanity Check: %v", v))
 }

@@ -107,6 +107,7 @@ func (g *Group) OnStart() error {
 func (g *Group) OnStop() {
 	g.BaseService.OnStop()
 	g.ticker.Stop()
+	return
 }
 
 func (g *Group) SetHeadSizeLimit(limit int64) {
@@ -567,8 +568,9 @@ func (gr *GroupReader) ReadLine() (string, error) {
 		bytesRead, err := gr.curReader.ReadBytes('\n')
 		if err == io.EOF {
 			// Open the next file
-			if err1 := gr.openFile(gr.curIndex + 1); err1 != nil {
-				return "", err1
+			err := gr.openFile(gr.curIndex + 1)
+			if err != nil {
+				return "", err
 			}
 			if len(bytesRead) > 0 && bytesRead[len(bytesRead)-1] == byte('\n') {
 				return linePrefix + string(bytesRead[:len(bytesRead)-1]), nil

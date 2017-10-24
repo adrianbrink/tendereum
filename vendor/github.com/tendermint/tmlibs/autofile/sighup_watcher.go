@@ -22,7 +22,7 @@ func initSighupWatcher() {
 	signal.Notify(c, syscall.SIGHUP)
 
 	go func() {
-		for range c {
+		for _ = range c {
 			sighupWatchers.closeAll()
 			atomic.AddInt32(&sighupCounter, 1)
 		}

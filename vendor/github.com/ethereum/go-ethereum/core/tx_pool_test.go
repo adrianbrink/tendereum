@@ -117,28 +117,6 @@ func validateTxPoolInternals(pool *TxPool) error {
 	return nil
 }
 
-// validateEvents checks that the correct number of transaction addition events
-// were fired on the pool's event feed.
-func validateEvents(events chan TxPreEvent, count int) error {
-	for i := 0; i < count; i++ {
-		select {
-		case <-events:
-		case <-time.After(time.Second):
-			return fmt.Errorf("event #%d not fired", i)
-		}
-	}
-	select {
-	case tx := <-events:
-		return fmt.Errorf("more than %d events fired: %v", count, tx.Tx)
-
-	case <-time.After(50 * time.Millisecond):
-		// This branch should be "default", but it's a data race between goroutines,
-		// reading the event channel and pushng into it, so better wait a bit ensuring
-		// really nothing gets injected.
-	}
-	return nil
-}
-
 func deriveSender(tx *types.Transaction) (common.Address, error) {
 	return types.Sender(types.HomesteadSigner{}, tx)
 }
@@ -171,9 +149,7 @@ func (c *testChain) State() (*state.StateDB, error) {
 // This test simulates a scenario where a new block is imported during a
 // state reset and tests whether the pending state is in sync with the
 // block head event that initiated the resetState().
-func TestStateChangeDuringTransactionPoolReset(t *testing.T) {
-	t.Parallel()
-
+func TestStateChangeDuringPoolReset(t *testing.T) {
 	var (
 		db, _      = ethdb.NewMemDatabase()
 		key, _     = crypto.GenerateKey()
@@ -225,8 +201,6 @@ func TestStateChangeDuringTransactionPoolReset(t *testing.T) {
 }
 
 func TestInvalidTransactions(t *testing.T) {
-	t.Parallel()
-
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
@@ -262,8 +236,6 @@ func TestInvalidTransactions(t *testing.T) {
 }
 
 func TestTransactionQueue(t *testing.T) {
-	t.Parallel()
-
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
@@ -315,9 +287,7 @@ func TestTransactionQueue(t *testing.T) {
 	}
 }
 
-func TestTransactionNegativeValue(t *testing.T) {
-	t.Parallel()
-
+func TestNegativeValue(t *testing.T) {
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
@@ -330,8 +300,6 @@ func TestTransactionNegativeValue(t *testing.T) {
 }
 
 func TestTransactionChainFork(t *testing.T) {
-	t.Parallel()
-
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
@@ -360,8 +328,6 @@ func TestTransactionChainFork(t *testing.T) {
 }
 
 func TestTransactionDoubleNonce(t *testing.T) {
-	t.Parallel()
-
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
@@ -410,9 +376,7 @@ func TestTransactionDoubleNonce(t *testing.T) {
 	}
 }
 
-func TestTransactionMissingNonce(t *testing.T) {
-	t.Parallel()
-
+func TestMissingNonce(t *testing.T) {
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
@@ -434,8 +398,6 @@ func TestTransactionMissingNonce(t *testing.T) {
 }
 
 func TestTransactionNonceRecovery(t *testing.T) {
-	t.Parallel()
-
 	const n = 10
 	pool, key := setupTxPool()
 	defer pool.Stop()
@@ -460,8 +422,6 @@ func TestTransactionNonceRecovery(t *testing.T) {
 // Tests that if an account runs out of funds, any pending and queued transactions
 // are dropped.
 func TestTransactionDropping(t *testing.T) {
-	t.Parallel()
-
 	// Create a test account and fund it
 	pool, key := setupTxPool()
 	defer pool.Stop()
@@ -555,8 +515,6 @@ func TestTransactionDropping(t *testing.T) {
 // of fund), all consecutive (still valid, but not executable) transactions are
 // postponed back into the future queue to prevent broadcasting them.
 func TestTransactionPostponing(t *testing.T) {
-	t.Parallel()
-
 	// Create a test account and fund it
 	pool, key := setupTxPool()
 	defer pool.Stop()
@@ -628,68 +586,9 @@ func TestTransactionPostponing(t *testing.T) {
 	}
 }
 
-// Tests that if the transaction pool has both executable and non-executable
-// transactions from an origin account, filling the nonce gap moves all queued
-// ones into the pending pool.
-func TestTransactionGapFilling(t *testing.T) {
-	t.Parallel()
-
-	// Create a test account and fund it
-	pool, key := setupTxPool()
-	defer pool.Stop()
-
-	account, _ := deriveSender(transaction(0, big.NewInt(0), key))
-	pool.currentState.AddBalance(account, big.NewInt(1000000))
-
-	// Keep track of transaction events to ensure all executables get announced
-	events := make(chan TxPreEvent, testTxPoolConfig.AccountQueue+5)
-	sub := pool.txFeed.Subscribe(events)
-	defer sub.Unsubscribe()
-
-	// Create a pending and a queued transaction with a nonce-gap in between
-	if err := pool.AddRemote(transaction(0, big.NewInt(100000), key)); err != nil {
-		t.Fatalf("failed to add pending transaction: %v", err)
-	}
-	if err := pool.AddRemote(transaction(2, big.NewInt(100000), key)); err != nil {
-		t.Fatalf("failed to add queued transaction: %v", err)
-	}
-	pending, queued := pool.Stats()
-	if pending != 1 {
-		t.Fatalf("pending transactions mismatched: have %d, want %d", pending, 1)
-	}
-	if queued != 1 {
-		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 1)
-	}
-	if err := validateEvents(events, 1); err != nil {
-		t.Fatalf("original event firing failed: %v", err)
-	}
-	if err := validateTxPoolInternals(pool); err != nil {
-		t.Fatalf("pool internal state corrupted: %v", err)
-	}
-	// Fill the nonce gap and ensure all transactions become pending
-	if err := pool.AddRemote(transaction(1, big.NewInt(100000), key)); err != nil {
-		t.Fatalf("failed to add gapped transaction: %v", err)
-	}
-	pending, queued = pool.Stats()
-	if pending != 3 {
-		t.Fatalf("pending transactions mismatched: have %d, want %d", pending, 3)
-	}
-	if queued != 0 {
-		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 0)
-	}
-	if err := validateEvents(events, 2); err != nil {
-		t.Fatalf("gap-filling event firing failed: %v", err)
-	}
-	if err := validateTxPoolInternals(pool); err != nil {
-		t.Fatalf("pool internal state corrupted: %v", err)
-	}
-}
-
 // Tests that if the transaction count belonging to a single account goes above
 // some threshold, the higher transactions are dropped to prevent DOS attacks.
 func TestTransactionQueueAccountLimiting(t *testing.T) {
-	t.Parallel()
-
 	// Create a test account and fund it
 	pool, key := setupTxPool()
 	defer pool.Stop()
@@ -733,8 +632,6 @@ func TestTransactionQueueGlobalLimitingNoLocals(t *testing.T) {
 }
 
 func testTransactionQueueGlobalLimiting(t *testing.T, nolocals bool) {
-	t.Parallel()
-
 	// Create the pool to test the limit enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -885,19 +782,12 @@ func testTransactionQueueTimeLimiting(t *testing.T, nolocals bool) {
 // above some threshold, as long as the transactions are executable, they are
 // accepted.
 func TestTransactionPendingLimiting(t *testing.T) {
-	t.Parallel()
-
 	// Create a test account and fund it
 	pool, key := setupTxPool()
 	defer pool.Stop()
 
 	account, _ := deriveSender(transaction(0, big.NewInt(0), key))
 	pool.currentState.AddBalance(account, big.NewInt(1000000))
-
-	// Keep track of transaction events to ensure all executables get announced
-	events := make(chan TxPreEvent, testTxPoolConfig.AccountQueue+5)
-	sub := pool.txFeed.Subscribe(events)
-	defer sub.Unsubscribe()
 
 	// Keep queuing up transactions and make sure all above a limit are dropped
 	for i := uint64(0); i < testTxPoolConfig.AccountQueue+5; i++ {
@@ -914,12 +804,6 @@ func TestTransactionPendingLimiting(t *testing.T) {
 	if len(pool.all) != int(testTxPoolConfig.AccountQueue+5) {
 		t.Errorf("total transaction mismatch: have %d, want %d", len(pool.all), testTxPoolConfig.AccountQueue+5)
 	}
-	if err := validateEvents(events, int(testTxPoolConfig.AccountQueue+5)); err != nil {
-		t.Fatalf("event firing failed: %v", err)
-	}
-	if err := validateTxPoolInternals(pool); err != nil {
-		t.Fatalf("pool internal state corrupted: %v", err)
-	}
 }
 
 // Tests that the transaction limits are enforced the same way irrelevant whether
@@ -928,8 +812,6 @@ func TestTransactionQueueLimitingEquivalency(t *testing.T)   { testTransactionLi
 func TestTransactionPendingLimitingEquivalency(t *testing.T) { testTransactionLimitingEquivalency(t, 0) }
 
 func testTransactionLimitingEquivalency(t *testing.T, origin uint64) {
-	t.Parallel()
-
 	// Add a batch of transactions to a pool one by one
 	pool1, key1 := setupTxPool()
 	defer pool1.Stop()
@@ -977,8 +859,6 @@ func testTransactionLimitingEquivalency(t *testing.T, origin uint64) {
 // some hard threshold, the higher transactions are dropped to prevent DOS
 // attacks.
 func TestTransactionPendingGlobalLimiting(t *testing.T) {
-	t.Parallel()
-
 	// Create the pool to test the limit enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -1024,8 +904,6 @@ func TestTransactionPendingGlobalLimiting(t *testing.T) {
 
 // Tests that if transactions start being capped, transactions are also removed from 'all'
 func TestTransactionCapClearsFromAll(t *testing.T) {
-	t.Parallel()
-
 	// Create the pool to test the limit enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -1059,8 +937,6 @@ func TestTransactionCapClearsFromAll(t *testing.T) {
 // some hard threshold, if they are under the minimum guaranteed slot count then
 // the transactions are still kept.
 func TestTransactionPendingMinimumAllowance(t *testing.T) {
-	t.Parallel()
-
 	// Create the pool to test the limit enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -1108,8 +984,6 @@ func TestTransactionPendingMinimumAllowance(t *testing.T) {
 //
 // Note, local transactions are never allowed to be dropped.
 func TestTransactionPoolRepricing(t *testing.T) {
-	t.Parallel()
-
 	// Create the pool to test the pricing enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -1117,11 +991,6 @@ func TestTransactionPoolRepricing(t *testing.T) {
 
 	pool := NewTxPool(testTxPoolConfig, params.TestChainConfig, blockchain)
 	defer pool.Stop()
-
-	// Keep track of transaction events to ensure all executables get announced
-	events := make(chan TxPreEvent, 32)
-	sub := pool.txFeed.Subscribe(events)
-	defer sub.Unsubscribe()
 
 	// Create a number of test accounts and fund them
 	keys := make([]*ecdsa.PrivateKey, 3)
@@ -1153,9 +1022,6 @@ func TestTransactionPoolRepricing(t *testing.T) {
 	if queued != 3 {
 		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 3)
 	}
-	if err := validateEvents(events, 4); err != nil {
-		t.Fatalf("original event firing failed: %v", err)
-	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1169,9 +1035,6 @@ func TestTransactionPoolRepricing(t *testing.T) {
 	if queued != 3 {
 		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 3)
 	}
-	if err := validateEvents(events, 0); err != nil {
-		t.Fatalf("reprice event firing failed: %v", err)
-	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1181,9 +1044,6 @@ func TestTransactionPoolRepricing(t *testing.T) {
 	}
 	if err := pool.AddRemote(pricedTransaction(2, big.NewInt(100000), big.NewInt(1), keys[1])); err != ErrUnderpriced {
 		t.Fatalf("adding underpriced queued transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
-	}
-	if err := validateEvents(events, 0); err != nil {
-		t.Fatalf("post-reprice event firing failed: %v", err)
 	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
@@ -1196,9 +1056,6 @@ func TestTransactionPoolRepricing(t *testing.T) {
 	if pending, _ = pool.Stats(); pending != 3 {
 		t.Fatalf("pending transactions mismatched: have %d, want %d", pending, 3)
 	}
-	if err := validateEvents(events, 1); err != nil {
-		t.Fatalf("post-reprice local event firing failed: %v", err)
-	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1207,8 +1064,6 @@ func TestTransactionPoolRepricing(t *testing.T) {
 // Tests that setting the transaction pool gas price to a higher value does not
 // remove local transactions.
 func TestTransactionPoolRepricingKeepsLocals(t *testing.T) {
-	t.Parallel()
-
 	// Create the pool to test the pricing enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -1270,8 +1125,6 @@ func TestTransactionPoolRepricingKeepsLocals(t *testing.T) {
 //
 // Note, local transactions are never allowed to be dropped.
 func TestTransactionPoolUnderpricing(t *testing.T) {
-	t.Parallel()
-
 	// Create the pool to test the pricing enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -1283,11 +1136,6 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 
 	pool := NewTxPool(config, params.TestChainConfig, blockchain)
 	defer pool.Stop()
-
-	// Keep track of transaction events to ensure all executables get announced
-	events := make(chan TxPreEvent, 32)
-	sub := pool.txFeed.Subscribe(events)
-	defer sub.Unsubscribe()
 
 	// Create a number of test accounts and fund them
 	keys := make([]*ecdsa.PrivateKey, 3)
@@ -1316,9 +1164,6 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 	if queued != 1 {
 		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 1)
 	}
-	if err := validateEvents(events, 3); err != nil {
-		t.Fatalf("original event firing failed: %v", err)
-	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1343,9 +1188,6 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 	if queued != 2 {
 		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 2)
 	}
-	if err := validateEvents(events, 2); err != nil {
-		t.Fatalf("additional event firing failed: %v", err)
-	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1361,9 +1203,6 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 	if queued != 2 {
 		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 2)
 	}
-	if err := validateEvents(events, 1); err != nil {
-		t.Fatalf("local event firing failed: %v", err)
-	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1372,8 +1211,6 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 // Tests that the pool rejects replacement transactions that don't meet the minimum
 // price bump required.
 func TestTransactionReplacement(t *testing.T) {
-	t.Parallel()
-
 	// Create the pool to test the pricing enforcement with
 	db, _ := ethdb.NewMemDatabase()
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
@@ -1381,11 +1218,6 @@ func TestTransactionReplacement(t *testing.T) {
 
 	pool := NewTxPool(testTxPoolConfig, params.TestChainConfig, blockchain)
 	defer pool.Stop()
-
-	// Keep track of transaction events to ensure all executables get announced
-	events := make(chan TxPreEvent, 32)
-	sub := pool.txFeed.Subscribe(events)
-	defer sub.Unsubscribe()
 
 	// Create a test account to add transactions with
 	key, _ := crypto.GenerateKey()
@@ -1404,9 +1236,6 @@ func TestTransactionReplacement(t *testing.T) {
 	if err := pool.AddRemote(pricedTransaction(0, big.NewInt(100000), big.NewInt(2), key)); err != nil {
 		t.Fatalf("failed to replace original cheap pending transaction: %v", err)
 	}
-	if err := validateEvents(events, 2); err != nil {
-		t.Fatalf("cheap replacement event firing failed: %v", err)
-	}
 
 	if err := pool.AddRemote(pricedTransaction(0, big.NewInt(100000), big.NewInt(price), key)); err != nil {
 		t.Fatalf("failed to add original proper pending transaction: %v", err)
@@ -1416,9 +1245,6 @@ func TestTransactionReplacement(t *testing.T) {
 	}
 	if err := pool.AddRemote(pricedTransaction(0, big.NewInt(100000), big.NewInt(threshold+1), key)); err != nil {
 		t.Fatalf("failed to replace original proper pending transaction: %v", err)
-	}
-	if err := validateEvents(events, 2); err != nil {
-		t.Fatalf("proper replacement event firing failed: %v", err)
 	}
 	// Add queued transactions, ensuring the minimum price bump is enforced for replacement (for ultra low prices too)
 	if err := pool.AddRemote(pricedTransaction(2, big.NewInt(100000), big.NewInt(1), key)); err != nil {
@@ -1440,10 +1266,6 @@ func TestTransactionReplacement(t *testing.T) {
 	if err := pool.AddRemote(pricedTransaction(2, big.NewInt(100000), big.NewInt(threshold+1), key)); err != nil {
 		t.Fatalf("failed to replace original queued transaction: %v", err)
 	}
-
-	if err := validateEvents(events, 0); err != nil {
-		t.Fatalf("queued replacement event firing failed: %v", err)
-	}
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1455,8 +1277,6 @@ func TestTransactionJournaling(t *testing.T)         { testTransactionJournaling
 func TestTransactionJournalingNoLocals(t *testing.T) { testTransactionJournaling(t, true) }
 
 func testTransactionJournaling(t *testing.T, nolocals bool) {
-	t.Parallel()
-
 	// Create a temporary file for the journal
 	file, err := ioutil.TempFile("", "")
 	if err != nil {
@@ -1515,7 +1335,6 @@ func testTransactionJournaling(t *testing.T, nolocals bool) {
 	pool.Stop()
 	statedb.SetNonce(crypto.PubkeyToAddress(local.PublicKey), 1)
 	blockchain = &testBlockChain{statedb, big.NewInt(1000000), new(event.Feed)}
-
 	pool = NewTxPool(config, params.TestChainConfig, blockchain)
 
 	pending, queued = pool.Stats()
@@ -1539,7 +1358,6 @@ func testTransactionJournaling(t *testing.T, nolocals bool) {
 	pool.lockedReset(nil, nil)
 	time.Sleep(2 * config.Rejournal)
 	pool.Stop()
-
 	statedb.SetNonce(crypto.PubkeyToAddress(local.PublicKey), 1)
 	blockchain = &testBlockChain{statedb, big.NewInt(1000000), new(event.Feed)}
 	pool = NewTxPool(config, params.TestChainConfig, blockchain)

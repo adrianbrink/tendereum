@@ -77,7 +77,8 @@ func TestCheckHeadSizeLimit(t *testing.T) {
 	assertGroupInfo(t, g.ReadGroupInfo(), 0, 0, 999000, 999000)
 
 	// Write 1000 more bytes.
-	if err := g.WriteLine(RandStr(999)); err != nil {
+	err := g.WriteLine(RandStr(999))
+	if err != nil {
 		t.Fatal("Error appending to head", err)
 	}
 	g.Flush()
@@ -87,7 +88,8 @@ func TestCheckHeadSizeLimit(t *testing.T) {
 	assertGroupInfo(t, g.ReadGroupInfo(), 0, 1, 1000000, 0)
 
 	// Write 1000 more bytes.
-	if err := g.WriteLine(RandStr(999)); err != nil {
+	err = g.WriteLine(RandStr(999))
+	if err != nil {
 		t.Fatal("Error appending to head", err)
 	}
 	g.Flush()
@@ -98,7 +100,8 @@ func TestCheckHeadSizeLimit(t *testing.T) {
 
 	// Write 1000 bytes 999 times.
 	for i := 0; i < 999; i++ {
-		if err := g.WriteLine(RandStr(999)); err != nil {
+		err := g.WriteLine(RandStr(999))
+		if err != nil {
 			t.Fatal("Error appending to head", err)
 		}
 	}
@@ -110,7 +113,7 @@ func TestCheckHeadSizeLimit(t *testing.T) {
 	assertGroupInfo(t, g.ReadGroupInfo(), 0, 2, 2000000, 0)
 
 	// Write 1000 more bytes.
-	_, err := g.Head.Write([]byte(RandStr(999) + "\n"))
+	_, err = g.Head.Write([]byte(RandStr(999) + "\n"))
 	if err != nil {
 		t.Fatal("Error appending to head", err)
 	}
