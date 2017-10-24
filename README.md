@@ -14,6 +14,7 @@ provide full API compatibility with existing tooling such as Truffle. Tendereum 
 provide a light client which exposes all Web3 endpoints. The light client sits beneath the RPC
 server and facilitates secure communication with the network.
 
+
 ### Purpose
 The purpose of Tendereum is initially a learning exercise. It forces me to fully understand the
 Ethereum application structure and figure out how to map that neatly onto Tendermint Core.
