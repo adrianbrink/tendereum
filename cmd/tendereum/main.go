@@ -18,5 +18,6 @@ func main() {
 	)
 
 	cmd := cli.PrepareBaseCmd(rootCmd, "TE", os.ExpandEnv("$HOME/.tendereum"))
+	// nolint: errcheck
 	cmd.Execute()
 }

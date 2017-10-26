@@ -26,6 +26,7 @@ const (
 
 // TendereumApplication is an application that sits on top of Tendermint Core. It provides wraps
 // an EVM and Ethereum state. It implements Query in order to service any RPC client.
+// nolint: megacheck, structcheck
 type TendereumApplication struct {
 	types.BaseApplication
 
@@ -76,6 +77,7 @@ func NewTendereumApplication(logger log.Logger) *TendereumApplication {
 	}
 }
 
+// nolint: megacheck, structcheck
 type writeAheadState struct {
 	state        *state.StateDB
 	txIndex      int

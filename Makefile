@@ -27,6 +27,10 @@ test:
 	@echo "--> Running go test --race"
 	go test -v -race $(PACKAGES)
 
+test_integration:
+	@echo "--> Running integration tests"
+	@echo "Not yet implemented"
+
 clean:
 	@echo "--> Running clean"
 	rm -rf vendor/
