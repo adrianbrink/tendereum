@@ -1,4 +1,4 @@
-package: github.com/adrianbrink/tendereum
+package: github.com/cosmos/tendereum
 import:
 - package: github.com/ethereum/go-ethereum
   version: 1.7.x
