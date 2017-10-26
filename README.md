@@ -1,6 +1,6 @@
 # tendereum
 
-[![CircleCI](https://circleci.com/gh/adrianbrink/tendereum/tree/master.svg?style=svg)](https://circleci.com/gh/adrianbrink/tendereum/tree/master)
+[![CircleCI](https://circleci.com/gh/cosmos/tendereum/tree/master.svg?style=svg)](https://circleci.com/gh/adrianbrink/tendereum/tree/master)
 
 ## Overview
 
