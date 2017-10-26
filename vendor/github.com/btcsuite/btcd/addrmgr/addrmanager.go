@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014 The btcsuite developers
+// Copyright (c) 2013-2016 The btcsuite developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -96,8 +96,6 @@ const (
 	// address manager will claim to need more addresses.
 	needAddressThreshold = 1000
 
-	newAddressBufferSize = 50
-
 	// dumpAddressInterval is the interval used to dump the address
 	// cache to disk for future use.
 	dumpAddressInterval = time.Minute * 10
@@ -171,7 +169,7 @@ func (a *AddrManager) updateAddress(netAddr, srcAddr *wire.NetAddress) {
 	addr := NetAddressKey(netAddr)
 	ka := a.find(netAddr)
 	if ka != nil {
-		// TODO(oga) only update addresses periodically.
+		// TODO: only update addresses periodically.
 		// Update the last seen time and services.
 		// note that to prevent causing excess garbage on getaddr
 		// messages the netaddresses in addrmaanger are *immutable*,
@@ -598,18 +596,16 @@ func (a *AddrManager) AddAddressByIP(addrIP string) error {
 		return err
 	}
 	// Put it in wire.Netaddress
-	var na wire.NetAddress
-	na.Timestamp = time.Now()
-	na.IP = net.ParseIP(addr)
-	if na.IP == nil {
+	ip := net.ParseIP(addr)
+	if ip == nil {
 		return fmt.Errorf("invalid ip address %s", addr)
 	}
 	port, err := strconv.ParseUint(portStr, 10, 0)
 	if err != nil {
 		return fmt.Errorf("invalid port %s: %v", portStr, err)
 	}
-	na.Port = uint16(port)
-	a.AddAddress(&na, &na) // XXX use correct src address
+	na := wire.NewNetAddressIPPort(ip, uint16(port), 0)
+	a.AddAddress(na, na) // XXX use correct src address
 	return nil
 }
 
@@ -685,15 +681,15 @@ func (a *AddrManager) reset() {
 	}
 }
 
-// HostToNetAddress returns a netaddress given a host address. If the address is
-// a tor .onion address this will be taken care of. else if the host is not an
-// IP address it will be resolved (via tor if required).
+// HostToNetAddress returns a netaddress given a host address.  If the address
+// is a Tor .onion address this will be taken care of.  Else if the host is
+// not an IP address it will be resolved (via Tor if required).
 func (a *AddrManager) HostToNetAddress(host string, port uint16, services wire.ServiceFlag) (*wire.NetAddress, error) {
-	// tor address is 16 char base32 + ".onion"
+	// Tor address is 16 char base32 + ".onion"
 	var ip net.IP
 	if len(host) == 22 && host[16:] == ".onion" {
 		// go base32 encoding uses capitals (as does the rfc
-		// but tor and bitcoind tend to user lowercase, so we switch
+		// but Tor and bitcoind tend to user lowercase, so we switch
 		// case here.
 		data, err := base32.StdEncoding.DecodeString(
 			strings.ToUpper(host[:16]))
@@ -717,11 +713,11 @@ func (a *AddrManager) HostToNetAddress(host string, port uint16, services wire.S
 }
 
 // ipString returns a string for the ip from the provided NetAddress. If the
-// ip is in the range used for tor addresses then it will be transformed into
+// ip is in the range used for Tor addresses then it will be transformed into
 // the relevant .onion address.
 func ipString(na *wire.NetAddress) string {
 	if IsOnionCatTor(na) {
-		// We know now that na.IP is long enogh.
+		// We know now that na.IP is long enough.
 		base32 := base32.StdEncoding.EncodeToString(na.IP[6:])
 		return strings.ToLower(base32) + ".onion"
 	}
@@ -741,7 +737,7 @@ func NetAddressKey(na *wire.NetAddress) string {
 // random one from the possible addresses with preference given to ones that
 // have not been used recently and should not pick 'close' addresses
 // consecutively.
-func (a *AddrManager) GetAddress(class string) *KnownAddress {
+func (a *AddrManager) GetAddress() *KnownAddress {
 	// Protect concurrent access.
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
@@ -1071,16 +1067,14 @@ func (a *AddrManager) GetBestLocalAddress(remoteAddr *wire.NetAddress) *wire.Net
 			remoteAddr.Port)
 
 		// Send something unroutable if nothing suitable.
-		bestAddress = &wire.NetAddress{
-			Timestamp: time.Now(),
-			Services:  wire.SFNodeNetwork,
-			Port:      0,
-		}
+		var ip net.IP
 		if !IsIPv4(remoteAddr) && !IsOnionCatTor(remoteAddr) {
-			bestAddress.IP = net.IPv6zero
+			ip = net.IPv6zero
 		} else {
-			bestAddress.IP = net.IPv4zero
+			ip = net.IPv4zero
 		}
+		services := wire.SFNodeNetwork | wire.SFNodeWitness | wire.SFNodeBloom
+		bestAddress = wire.NewNetAddressIPPort(ip, 0, services)
 	}
 
 	return bestAddress

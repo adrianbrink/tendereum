@@ -5,7 +5,7 @@ based on tags.
 It can also handle Cross-Field and Cross-Struct validation for nested structs
 and has the ability to dive into arrays and maps of any type.
 
-see more examples https://github.com/go-playground/validator/tree/v9/examples
+see more examples https://github.com/go-playground/validator/tree/v9/_examples
 
 Validation Functions Return Type error
 
@@ -31,7 +31,7 @@ Custom Validation Functions
 Custom Validation functions can be added. Example:
 
 	// Structure
-	func customFunc(fl FielddLevel) bool {
+	func customFunc(fl FieldLevel) bool {
 
 		if fl.Field().String() == "invalid" {
 			return false
@@ -56,7 +56,7 @@ Cross-Field Validation can be done via the following tags:
 	- eqcsfield
 	- necsfield
 	- gtcsfield
-	- ftecsfield
+	- gtecsfield
 	- ltcsfield
 	- ltecsfield
 
@@ -219,6 +219,13 @@ not "". For slices, maps, pointers, interfaces, channels and functions
 ensures the value is not nil.
 
 	Usage: required
+
+Is Default
+
+This validates that the value is the default value and is almost the
+opposite of required.
+
+	Usage: isdefault
 
 Length
 
@@ -460,6 +467,12 @@ This does the same as ltefield except that it validates the field provided relat
 to the top level struct.
 
 	Usage: ltecsfield=InnerStructField.Field
+
+Unique
+
+For arrays & slices, unique will ensure that there are no duplicates.
+
+	Usage: unique
 
 Alpha Only
 
@@ -793,6 +806,18 @@ This validates that a string value contains a valid MAC Adress.
 Note: See Go's ParseMAC for accepted formats and types:
 
 	http://golang.org/src/net/mac.go?s=866:918#L29
+
+Hostname
+
+This validates that a string value is a valid Hostname
+
+	Usage: hostname
+
+Full Qualified Domain Name (FQDN)
+
+This validates that a string value contains a valid FQDN.
+
+	Usage: fqdn
 
 Alias Validators and Tags
 

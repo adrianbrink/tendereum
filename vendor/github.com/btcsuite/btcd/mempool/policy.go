@@ -19,10 +19,9 @@ const (
 	// that are considered standard in a pay-to-script-hash script.
 	maxStandardP2SHSigOps = 15
 
-	// maxStandardTxSize is the maximum size allowed for transactions that
-	// are considered standard and will therefore be relayed and considered
-	// for mining.
-	maxStandardTxSize = 100000
+	// maxStandardTxCost is the max weight permitted by any transaction
+	// according to the current default policy.
+	maxStandardTxWeight = 400000
 
 	// maxStandardSigScriptSize is the maximum size allowed for a
 	// transaction input signature script to be considered standard.  This
@@ -78,82 +77,6 @@ func calcMinRequiredTxRelayFee(serializedSize int64, minRelayTxFee btcutil.Amoun
 	}
 
 	return minFee
-}
-
-// CalcPriority returns a transaction priority given a transaction and the sum
-// of each of its input values multiplied by their age (# of confirmations).
-// Thus, the final formula for the priority is:
-// sum(inputValue * inputAge) / adjustedTxSize
-func CalcPriority(tx *wire.MsgTx, utxoView *blockchain.UtxoViewpoint, nextBlockHeight int32) float64 {
-	// In order to encourage spending multiple old unspent transaction
-	// outputs thereby reducing the total set, don't count the constant
-	// overhead for each input as well as enough bytes of the signature
-	// script to cover a pay-to-script-hash redemption with a compressed
-	// pubkey.  This makes additional inputs free by boosting the priority
-	// of the transaction accordingly.  No more incentive is given to avoid
-	// encouraging gaming future transactions through the use of junk
-	// outputs.  This is the same logic used in the reference
-	// implementation.
-	//
-	// The constant overhead for a txin is 41 bytes since the previous
-	// outpoint is 36 bytes + 4 bytes for the sequence + 1 byte the
-	// signature script length.
-	//
-	// A compressed pubkey pay-to-script-hash redemption with a maximum len
-	// signature is of the form:
-	// [OP_DATA_73 <73-byte sig> + OP_DATA_35 + {OP_DATA_33
-	// <33 byte compresed pubkey> + OP_CHECKSIG}]
-	//
-	// Thus 1 + 73 + 1 + 1 + 33 + 1 = 110
-	overhead := 0
-	for _, txIn := range tx.TxIn {
-		// Max inputs + size can't possibly overflow here.
-		overhead += 41 + minInt(110, len(txIn.SignatureScript))
-	}
-
-	serializedTxSize := tx.SerializeSize()
-	if overhead >= serializedTxSize {
-		return 0.0
-	}
-
-	inputValueAge := calcInputValueAge(tx, utxoView, nextBlockHeight)
-	return inputValueAge / float64(serializedTxSize-overhead)
-}
-
-// calcInputValueAge is a helper function used to calculate the input age of
-// a transaction.  The input age for a txin is the number of confirmations
-// since the referenced txout multiplied by its output value.  The total input
-// age is the sum of this value for each txin.  Any inputs to the transaction
-// which are currently in the mempool and hence not mined into a block yet,
-// contribute no additional input age to the transaction.
-func calcInputValueAge(tx *wire.MsgTx, utxoView *blockchain.UtxoViewpoint, nextBlockHeight int32) float64 {
-	var totalInputAge float64
-	for _, txIn := range tx.TxIn {
-		// Don't attempt to accumulate the total input age if the
-		// referenced transaction output doesn't exist.
-		originHash := &txIn.PreviousOutPoint.Hash
-		originIndex := txIn.PreviousOutPoint.Index
-		txEntry := utxoView.LookupEntry(originHash)
-		if txEntry != nil && !txEntry.IsOutputSpent(originIndex) {
-			// Inputs with dependencies currently in the mempool
-			// have their block height set to a special constant.
-			// Their input age should be computed as zero since
-			// their parent hasn't made it into a block yet.
-			var inputAge int32
-			originHeight := txEntry.BlockHeight()
-			if originHeight == mempoolHeight {
-				inputAge = 0
-			} else {
-				inputAge = nextBlockHeight - originHeight
-			}
-
-			// Sum the input value times age.
-			inputValue := txEntry.AmountByIndex(originIndex)
-			totalInputAge += float64(inputValue * int64(inputAge))
-		}
-	}
-
-	return totalInputAge
 }
 
 // checkInputsStandard performs a series of checks on a transaction's inputs
@@ -293,17 +216,43 @@ func isDust(txOut *wire.TxOut, minRelayTxFee btcutil.Amount) bool {
 	//   36 prev outpoint, 1 script len, 73 script [1 OP_DATA_72,
 	//   72 sig], 4 sequence
 	//
+	// Pay-to-witness-pubkey-hash bytes breakdown:
+	//
+	//  Output to witness key hash (31 bytes);
+	//   8 value, 1 script len, 22 script [1 OP_0, 1 OP_DATA_20,
+	//   20 bytes hash160]
+	//
+	//  Input (67 bytes as the 107 witness stack is discounted):
+	//   36 prev outpoint, 1 script len, 0 script (not sigScript), 107
+	//   witness stack bytes [1 element length, 33 compressed pubkey,
+	//   element length 72 sig], 4 sequence
+	//
+	//
 	// Theoretically this could examine the script type of the output script
 	// and use a different size for the typical input script size for
 	// pay-to-pubkey vs pay-to-pubkey-hash inputs per the above breakdowns,
-	// but the only combinination which is less than the value chosen is
+	// but the only combination which is less than the value chosen is
 	// a pay-to-pubkey script with a compressed pubkey, which is not very
 	// common.
 	//
 	// The most common scripts are pay-to-pubkey-hash, and as per the above
 	// breakdown, the minimum size of a p2pkh input script is 148 bytes.  So
-	// that figure is used.
-	totalSize := txOut.SerializeSize() + 148
+	// that figure is used. If the output being spent is a witness program,
+	// then we apply the witness discount to the size of the signature.
+	//
+	// The segwit analogue to p2pkh is a p2wkh output. This is the smallest
+	// output possible using the new segwit features. The 107 bytes of
+	// witness data is discounted by a factor of 4, leading to a computed
+	// value of 67 bytes of witness data.
+	//
+	// Both cases share a 41 byte preamble required to reference the input
+	// being spent and the sequence number of the input.
+	totalSize := txOut.SerializeSize() + 41
+	if txscript.IsWitnessProgram(txOut.PkScript) {
+		totalSize += (107 / blockchain.WitnessScaleFactor)
+	} else {
+		totalSize += 107
+	}
 
 	// The output is considered dust if the cost to the network to spend the
 	// coins is more than 1/3 of the minimum free transaction relay fee.
@@ -328,14 +277,15 @@ func isDust(txOut *wire.TxOut, minRelayTxFee btcutil.Amount) bool {
 // of recognized forms, and not containing "dust" outputs (those that are
 // so small it costs more to process them than they are worth).
 func checkTransactionStandard(tx *btcutil.Tx, height int32,
-	medianTimePast time.Time, minRelayTxFee btcutil.Amount) error {
+	medianTimePast time.Time, minRelayTxFee btcutil.Amount,
+	maxTxVersion int32) error {
 
 	// The transaction must be a currently supported version.
 	msgTx := tx.MsgTx()
-	if msgTx.Version > wire.TxVersion || msgTx.Version < 1 {
+	if msgTx.Version > maxTxVersion || msgTx.Version < 1 {
 		str := fmt.Sprintf("transaction version %d is not in the "+
 			"valid range of %d-%d", msgTx.Version, 1,
-			wire.TxVersion)
+			maxTxVersion)
 		return txRuleError(wire.RejectNonstandard, str)
 	}
 
@@ -350,10 +300,10 @@ func checkTransactionStandard(tx *btcutil.Tx, height int32,
 	// almost as much to process as the sender fees, limit the maximum
 	// size of a transaction.  This also helps mitigate CPU exhaustion
 	// attacks.
-	serializedLen := msgTx.SerializeSize()
-	if serializedLen > maxStandardTxSize {
-		str := fmt.Sprintf("transaction size of %v is larger than max "+
-			"allowed size of %v", serializedLen, maxStandardTxSize)
+	txWeight := blockchain.GetTransactionWeight(tx)
+	if txWeight > maxStandardTxWeight {
+		str := fmt.Sprintf("weight of transaction %v is larger than max "+
+			"allowed weight of %v", txWeight, maxStandardTxWeight)
 		return txRuleError(wire.RejectNonstandard, str)
 	}
 
@@ -419,11 +369,15 @@ func checkTransactionStandard(tx *btcutil.Tx, height int32,
 	return nil
 }
 
-// minInt is a helper function to return the minimum of two ints.  This avoids
-// a math import and the need to cast to floats.
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+// GetTxVirtualSize computes the virtual size of a given transaction. A
+// transaction's virtual size is based off its weight, creating a discount for
+// any witness data it contains, proportional to the current
+// blockchain.WitnessScaleFactor value.
+func GetTxVirtualSize(tx *btcutil.Tx) int64 {
+	// vSize := (weight(tx) + 3) / 4
+	//       := (((baseSize * 3) + totalSize) + 3) / 4
+	// We add 3 here as a way to compute the ceiling of the prior arithmetic
+	// to 4. The division by 4 creates a discount for wit witness data.
+	return (blockchain.GetTransactionWeight(tx) + (blockchain.WitnessScaleFactor - 1)) /
+		blockchain.WitnessScaleFactor
 }

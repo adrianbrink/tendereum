@@ -15,7 +15,7 @@ import (
 
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcutil"
-	flags "github.com/btcsuite/go-flags"
+	flags "github.com/jessevdk/go-flags"
 )
 
 const (
@@ -211,7 +211,15 @@ func loadConfig() (*config, []string, error) {
 	}
 
 	if _, err := os.Stat(preCfg.ConfigFile); os.IsNotExist(err) {
-		err := createDefaultConfigFile(preCfg.ConfigFile)
+		// Use config file for RPC server to create default btcctl config
+		var serverConfigPath string
+		if preCfg.Wallet {
+			serverConfigPath = filepath.Join(btcwalletHomeDir, "btcwallet.conf")
+		} else {
+			serverConfigPath = filepath.Join(btcdHomeDir, "btcd.conf")
+		}
+
+		err := createDefaultConfigFile(preCfg.ConfigFile, serverConfigPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating a default config file: %v\n", err)
 		}
@@ -272,17 +280,16 @@ func loadConfig() (*config, []string, error) {
 }
 
 // createDefaultConfig creates a basic config file at the given destination path.
-// For this it tries to read the btcd config file at its default path, and extract
-// the RPC user and password from it.
-func createDefaultConfigFile(destinationPath string) error {
-	// Read btcd.conf from its default path
-	btcdConfigPath := filepath.Join(btcdHomeDir, "btcd.conf")
-	btcdConfigFile, err := os.Open(btcdConfigPath)
+// For this it tries to read the config file for the RPC server (either btcd or
+// btcwallet), and extract the RPC user and password from it.
+func createDefaultConfigFile(destinationPath, serverConfigPath string) error {
+	// Read the RPC server config
+	serverConfigFile, err := os.Open(serverConfigPath)
 	if err != nil {
 		return err
 	}
-	defer btcdConfigFile.Close()
-	content, err := ioutil.ReadAll(btcdConfigFile)
+	defer serverConfigFile.Close()
+	content, err := ioutil.ReadAll(serverConfigFile)
 	if err != nil {
 		return err
 	}
@@ -309,6 +316,13 @@ func createDefaultConfigFile(destinationPath string) error {
 		return nil
 	}
 
+	// Extract the notls
+	noTLSRegexp, err := regexp.Compile(`(?m)^\s*notls=(0|1)(?:\s|$)`)
+	if err != nil {
+		return err
+	}
+	noTLSSubmatches := noTLSRegexp.FindSubmatch(content)
+
 	// Create the destination directory if it does not exists
 	err = os.MkdirAll(filepath.Dir(destinationPath), 0700)
 	if err != nil {
@@ -323,8 +337,13 @@ func createDefaultConfigFile(destinationPath string) error {
 	}
 	defer dest.Close()
 
-	dest.WriteString(fmt.Sprintf("rpcuser=%s\nrpcpass=%s",
-		string(userSubmatches[1]), string(passSubmatches[1])))
+	destString := fmt.Sprintf("rpcuser=%s\nrpcpass=%s\n",
+		string(userSubmatches[1]), string(passSubmatches[1]))
+	if noTLSSubmatches != nil {
+		destString += fmt.Sprintf("notls=%s\n", noTLSSubmatches[1])
+	}
+
+	dest.WriteString(destString)
 
 	return nil
 }

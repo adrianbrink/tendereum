@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2016 The btcsuite developers
+// Copyright (c) 2013-2017 The btcsuite developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -7,12 +7,11 @@ package btcec
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"testing"
-
-	"github.com/btcsuite/fastsha256"
 )
 
 type signatureTest struct {
@@ -419,6 +418,24 @@ func TestSignatureSerialize(t *testing.T) {
 			},
 		},
 		{
+			"valid 4 - s is bigger than half order",
+			&Signature{
+				R: fromHex("a196ed0e7ebcbe7b63fe1d8eecbdbde03a67ceba4fc8f6482bdcb9606a911404"),
+				S: fromHex("971729c7fa944b465b35250c6570a2f31acbb14b13d1565fab7330dcb2b3dfb1"),
+			},
+			[]byte{
+				0x30, 0x45, 0x02, 0x21, 0x00, 0xa1, 0x96, 0xed,
+				0x0e, 0x7e, 0xbc, 0xbe, 0x7b, 0x63, 0xfe, 0x1d,
+				0x8e, 0xec, 0xbd, 0xbd, 0xe0, 0x3a, 0x67, 0xce,
+				0xba, 0x4f, 0xc8, 0xf6, 0x48, 0x2b, 0xdc, 0xb9,
+				0x60, 0x6a, 0x91, 0x14, 0x04, 0x02, 0x20, 0x68,
+				0xe8, 0xd6, 0x38, 0x05, 0x6b, 0xb4, 0xb9, 0xa4,
+				0xca, 0xda, 0xf3, 0x9a, 0x8f, 0x5d, 0x0b, 0x9f,
+				0xe3, 0x2b, 0x9b, 0x9b, 0x77, 0x49, 0xdc, 0x14,
+				0x5f, 0x2d, 0xb0, 0x1d, 0x82, 0x61, 0x90,
+			},
+		},
+		{
 			"zero signature",
 			&Signature{
 				R: big.NewInt(0),
@@ -558,7 +575,7 @@ func TestRFC6979(t *testing.T) {
 
 	for i, test := range tests {
 		privKey, _ := PrivKeyFromBytes(S256(), decodeHex(test.key))
-		hash := fastsha256.Sum256([]byte(test.msg))
+		hash := sha256.Sum256([]byte(test.msg))
 
 		// Ensure deterministically generated nonce is the expected value.
 		gotNonce := nonceRFC6979(privKey.D, hash[:]).Bytes()

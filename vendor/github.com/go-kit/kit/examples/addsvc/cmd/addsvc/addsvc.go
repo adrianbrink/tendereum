@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -140,7 +139,7 @@ func main() {
 		endpoints    = addendpoint.New(service, logger, duration, tracer)
 		httpHandler  = addtransport.NewHTTPHandler(endpoints, tracer, logger)
 		grpcServer   = addtransport.NewGRPCServer(endpoints, tracer, logger)
-		thriftServer = addtransport.NewThriftServer(context.Background(), endpoints)
+		thriftServer = addtransport.NewThriftServer(endpoints)
 	)
 
 	// Now we're to the part of the func main where we want to start actually
@@ -150,8 +149,8 @@ func main() {
 	// struct, which is a combination of 2 anonymous functions: the first
 	// function actually runs the component, and the second function should
 	// interrupt the first function and cause it to return. It's in these
-	// functions that we actually bin the Go kit server/handler structs to the
-	// concrete transports and start them running.
+	// functions that we actually bind the Go kit server/handler structs to the
+	// concrete transports and run them.
 	//
 	// Putting each component into its own block is mostly for aesthetics: it
 	// clearly demarcates the scope in which each listener/socket may be used.

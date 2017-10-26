@@ -2,6 +2,7 @@ package validator
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
@@ -776,7 +777,7 @@ func TestStructPartial(t *testing.T) {
 
 	// the following should all return no errors as everything is valid in
 	// the default state
-	errs := validate.StructPartial(tPartial, p1...)
+	errs := validate.StructPartialCtx(context.Background(), tPartial, p1...)
 	Equal(t, errs, nil)
 
 	errs = validate.StructPartial(tPartial, p2...)
@@ -786,7 +787,7 @@ func TestStructPartial(t *testing.T) {
 	errs = validate.StructPartial(tPartial.SubSlice[0], p3...)
 	Equal(t, errs, nil)
 
-	errs = validate.StructExcept(tPartial, p1...)
+	errs = validate.StructExceptCtx(context.Background(), tPartial, p1...)
 	Equal(t, errs, nil)
 
 	errs = validate.StructExcept(tPartial, p2...)
@@ -991,7 +992,7 @@ func TestCrossStructLteFieldValidation(t *testing.T) {
 	AssertError(t, errs, "Test.Float", "Test.Float", "Float", "Float", "ltecsfield")
 	AssertError(t, errs, "Test.Array", "Test.Array", "Array", "Array", "ltecsfield")
 
-	errs = validate.VarWithValue(1, "", "ltecsfield")
+	errs = validate.VarWithValueCtx(context.Background(), 1, "", "ltecsfield")
 	NotEqual(t, errs, nil)
 	AssertError(t, errs, "", "", "", "", "ltecsfield")
 
@@ -1827,7 +1828,7 @@ func TestSQLValue2Validation(t *testing.T) {
 	AssertError(t, errs, "", "", "", "", "required")
 
 	val.Name = "Valid Name"
-	errs = validate.Var(val, "required")
+	errs = validate.VarCtx(context.Background(), val, "required")
 	Equal(t, errs, nil)
 
 	val.Name = "errorme"
@@ -5127,6 +5128,10 @@ func TestAddFunctions(t *testing.T) {
 		return true
 	}
 
+	fnCtx := func(ctx context.Context, fl FieldLevel) bool {
+		return true
+	}
+
 	validate := New()
 
 	errs := validate.RegisterValidation("new", fn)
@@ -5139,6 +5144,9 @@ func TestAddFunctions(t *testing.T) {
 	NotEqual(t, errs, nil)
 
 	errs = validate.RegisterValidation("new", fn)
+	Equal(t, errs, nil)
+
+	errs = validate.RegisterValidationCtx("new", fnCtx)
 	Equal(t, errs, nil)
 
 	PanicMatches(t, func() { validate.RegisterValidation("dive", fn) }, "Tag 'dive' either contains restricted characters or is the same as a restricted tag needed for normal operation")
@@ -5238,7 +5246,7 @@ func TestIsGt(t *testing.T) {
 	errs = validate.Var(tm, "gt")
 	Equal(t, errs, nil)
 
-	t2 := time.Now().UTC()
+	t2 := time.Now().UTC().Add(-time.Hour)
 
 	errs = validate.Var(t2, "gt")
 	NotEqual(t, errs, nil)
@@ -5276,7 +5284,7 @@ func TestIsGte(t *testing.T) {
 	errs := validate.Var(t1, "gte")
 	Equal(t, errs, nil)
 
-	t2 := time.Now().UTC()
+	t2 := time.Now().UTC().Add(-time.Hour)
 
 	errs = validate.Var(t2, "gte")
 	NotEqual(t, errs, nil)
@@ -5323,7 +5331,7 @@ func TestIsLt(t *testing.T) {
 	i := true
 	PanicMatches(t, func() { validate.Var(i, "lt") }, "Bad field type bool")
 
-	t1 := time.Now().UTC()
+	t1 := time.Now().UTC().Add(-time.Hour)
 
 	errs = validate.Var(t1, "lt")
 	Equal(t, errs, nil)
@@ -5362,7 +5370,7 @@ func TestIsLte(t *testing.T) {
 	i := true
 	PanicMatches(t, func() { validate.Var(i, "lte") }, "Bad field type bool")
 
-	t1 := time.Now().UTC()
+	t1 := time.Now().UTC().Add(-time.Hour)
 
 	errs := validate.Var(t1, "lte")
 	Equal(t, errs, nil)
@@ -6695,7 +6703,7 @@ func TestStructFiltered(t *testing.T) {
 
 	// the following should all return no errors as everything is valid in
 	// the default state
-	errs := validate.StructFiltered(tPartial, p1)
+	errs := validate.StructFilteredCtx(context.Background(), tPartial, p1)
 	Equal(t, errs, nil)
 
 	errs = validate.StructFiltered(tPartial, p2)
@@ -7012,4 +7020,296 @@ func TestMapStructNamespace(t *testing.T) {
 	ve := errs.(ValidationErrors)
 	Equal(t, len(ve), 1)
 	AssertError(t, errs, "children[1].name", "Children[1].Name", "name", "Name", "required")
+}
+
+func TestFieldLevelName(t *testing.T) {
+	type Test struct {
+		String string            `validate:"custom1"      json:"json1"`
+		Array  []string          `validate:"dive,custom2" json:"json2"`
+		Map    map[string]string `validate:"dive,custom3" json:"json3"`
+		Array2 []string          `validate:"custom4"      json:"json4"`
+		Map2   map[string]string `validate:"custom5"      json:"json5"`
+	}
+
+	var res1, res2, res3, res4, res5, alt1, alt2, alt3, alt4, alt5 string
+	validate := New()
+	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+
+		if name == "-" {
+			return ""
+		}
+
+		return name
+	})
+	validate.RegisterValidation("custom1", func(fl FieldLevel) bool {
+		res1 = fl.FieldName()
+		alt1 = fl.StructFieldName()
+		return true
+	})
+	validate.RegisterValidation("custom2", func(fl FieldLevel) bool {
+		res2 = fl.FieldName()
+		alt2 = fl.StructFieldName()
+		return true
+	})
+	validate.RegisterValidation("custom3", func(fl FieldLevel) bool {
+		res3 = fl.FieldName()
+		alt3 = fl.StructFieldName()
+		return true
+	})
+	validate.RegisterValidation("custom4", func(fl FieldLevel) bool {
+		res4 = fl.FieldName()
+		alt4 = fl.StructFieldName()
+		return true
+	})
+	validate.RegisterValidation("custom5", func(fl FieldLevel) bool {
+		res5 = fl.FieldName()
+		alt5 = fl.StructFieldName()
+		return true
+	})
+
+	test := Test{
+		String: "test",
+		Array:  []string{"1"},
+		Map:    map[string]string{"test": "test"},
+	}
+
+	errs := validate.Struct(test)
+	Equal(t, errs, nil)
+	Equal(t, res1, "json1")
+	Equal(t, alt1, "String")
+	Equal(t, res2, "json2[0]")
+	Equal(t, alt2, "Array[0]")
+	Equal(t, res3, "json3[test]")
+	Equal(t, alt3, "Map[test]")
+	Equal(t, res4, "json4")
+	Equal(t, alt4, "Array2")
+	Equal(t, res5, "json5")
+	Equal(t, alt5, "Map2")
+}
+
+func TestValidateStructRegisterCtx(t *testing.T) {
+
+	var ctxVal string
+
+	fnCtx := func(ctx context.Context, fl FieldLevel) bool {
+		ctxVal = ctx.Value(&ctxVal).(string)
+		return true
+	}
+
+	var ctxSlVal string
+	slFn := func(ctx context.Context, sl StructLevel) {
+		ctxSlVal = ctx.Value(&ctxSlVal).(string)
+	}
+
+	type Test struct {
+		Field string `validate:"val"`
+	}
+
+	var tst Test
+
+	validate := New()
+	validate.RegisterValidationCtx("val", fnCtx)
+	validate.RegisterStructValidationCtx(slFn, Test{})
+
+	ctx := context.WithValue(context.Background(), &ctxVal, "testval")
+	ctx = context.WithValue(ctx, &ctxSlVal, "slVal")
+	errs := validate.StructCtx(ctx, tst)
+	Equal(t, errs, nil)
+	Equal(t, ctxVal, "testval")
+	Equal(t, ctxSlVal, "slVal")
+}
+
+func TestHostnameValidation(t *testing.T) {
+	tests := []struct {
+		param    string
+		expected bool
+	}{
+		{"test.example.com", true},
+		{"example.com", true},
+		{"example24.com", true},
+		{"test.example24.com", true},
+		{"test24.example24.com", true},
+		{"example", true},
+		{"test.example.com.", false},
+		{"example.com.", false},
+		{"example24.com.", false},
+		{"test.example24.com.", false},
+		{"test24.example24.com.", false},
+		{"example.", false},
+		{"192.168.0.1", false},
+		{"email@example.com", false},
+		{"2001:cdba:0000:0000:0000:0000:3257:9652", false},
+		{"2001:cdba:0:0:0:0:3257:9652", false},
+		{"2001:cdba::3257:9652", false},
+	}
+
+	validate := New()
+
+	for i, test := range tests {
+
+		errs := validate.Var(test.param, "hostname")
+
+		if test.expected {
+			if !IsEqual(errs, nil) {
+				t.Fatalf("Index: %d hostname failed Error: %s", i, errs)
+			}
+		} else {
+			if IsEqual(errs, nil) {
+				t.Fatalf("Index: %d hostname failed Error: %s", i, errs)
+			} else {
+				val := getError(errs, "", "")
+				if val.Tag() != "hostname" {
+					t.Fatalf("Index: %d hostname failed Error: %s", i, errs)
+				}
+			}
+		}
+	}
+}
+
+func TestFQDNValidation(t *testing.T) {
+	tests := []struct {
+		param    string
+		expected bool
+	}{
+		{"test.example.com", true},
+		{"example.com", true},
+		{"example24.com", true},
+		{"test.example24.com", true},
+		{"test24.example24.com", true},
+		{"test.example.com.", true},
+		{"example.com.", true},
+		{"example24.com.", true},
+		{"test.example24.com.", true},
+		{"test24.example24.com.", true},
+		{"test24.example24.com..", false},
+		{"example", false},
+		{"192.168.0.1", false},
+		{"email@example.com", false},
+		{"2001:cdba:0000:0000:0000:0000:3257:9652", false},
+		{"2001:cdba:0:0:0:0:3257:9652", false},
+		{"2001:cdba::3257:9652", false},
+		{"", false},
+	}
+
+	validate := New()
+
+	for i, test := range tests {
+
+		errs := validate.Var(test.param, "fqdn")
+
+		if test.expected {
+			if !IsEqual(errs, nil) {
+				t.Fatalf("Index: %d fqdn failed Error: %s", i, errs)
+			}
+		} else {
+			if IsEqual(errs, nil) {
+				t.Fatalf("Index: %d fqdn failed Error: %s", i, errs)
+			} else {
+				val := getError(errs, "", "")
+				if val.Tag() != "fqdn" {
+					t.Fatalf("Index: %d fqdn failed Error: %s", i, errs)
+				}
+			}
+		}
+	}
+}
+
+func TestIsDefault(t *testing.T) {
+
+	validate := New()
+
+	type Inner struct {
+		String string `validate:"isdefault"`
+	}
+	type Test struct {
+		String string `validate:"isdefault"`
+		Inner  *Inner `validate:"isdefault"`
+	}
+
+	var tt Test
+
+	errs := validate.Struct(tt)
+	Equal(t, errs, nil)
+
+	tt.Inner = &Inner{String: ""}
+	errs = validate.Struct(tt)
+	NotEqual(t, errs, nil)
+
+	fe := errs.(ValidationErrors)[0]
+	Equal(t, fe.Field(), "Inner")
+	Equal(t, fe.Namespace(), "Test.Inner")
+	Equal(t, fe.Tag(), "isdefault")
+
+	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+
+		if name == "-" {
+			return ""
+		}
+
+		return name
+	})
+
+	type Inner2 struct {
+		String string `validate:"isdefault"`
+	}
+
+	type Test2 struct {
+		Inner Inner2 `validate:"isdefault" json:"inner"`
+	}
+
+	var t2 Test2
+	errs = validate.Struct(t2)
+	Equal(t, errs, nil)
+
+	t2.Inner.String = "Changed"
+	errs = validate.Struct(t2)
+	NotEqual(t, errs, nil)
+
+	fe = errs.(ValidationErrors)[0]
+	Equal(t, fe.Field(), "inner")
+	Equal(t, fe.Namespace(), "Test2.inner")
+	Equal(t, fe.Tag(), "isdefault")
+}
+
+func TestUniqueValidation(t *testing.T) {
+	tests := []struct {
+		param    interface{}
+		expected bool
+	}{
+		{[]string{"a", "b"}, true},
+		{[]int{1, 2}, true},
+		{[]float64{1, 2}, true},
+		{[]interface{}{"a", "b"}, true},
+		{[]interface{}{"a", 1}, true},
+		{[]float64{1, 1}, false},
+		{[]int{1, 1}, false},
+		{[]string{"a", "a"}, false},
+		{[]interface{}{"a", "a"}, false},
+		{[]interface{}{"a", 1, "b", 1}, false},
+	}
+
+	validate := New()
+
+	for i, test := range tests {
+
+		errs := validate.Var(test.param, "unique")
+
+		if test.expected {
+			if !IsEqual(errs, nil) {
+				t.Fatalf("Index: %d unique failed Error: %v", i, errs)
+			}
+		} else {
+			if IsEqual(errs, nil) {
+				t.Fatalf("Index: %d unique failed Error: %v", i, errs)
+			} else {
+				val := getError(errs, "", "")
+				if val.Tag() != "unique" {
+					t.Fatalf("Index: %d unique failed Error: %v", i, errs)
+				}
+			}
+		}
+	}
+	PanicMatches(t, func() { validate.Var(1.0, "unique") }, "Bad field type float64")
 }

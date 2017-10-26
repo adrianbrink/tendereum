@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net"
 	"strings"
 	"time"
 )
@@ -77,7 +76,7 @@ func (msg *MsgVersion) AddService(service ServiceFlag) {
 // *bytes.Buffer so the number of remaining bytes can be ascertained.
 //
 // This is part of the Message interface implementation.
-func (msg *MsgVersion) BtcDecode(r io.Reader, pver uint32) error {
+func (msg *MsgVersion) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
 	buf, ok := r.(*bytes.Buffer)
 	if !ok {
 		return fmt.Errorf("MsgVersion.BtcDecode reader is not a " +
@@ -150,7 +149,7 @@ func (msg *MsgVersion) BtcDecode(r io.Reader, pver uint32) error {
 
 // BtcEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
-func (msg *MsgVersion) BtcEncode(w io.Writer, pver uint32) error {
+func (msg *MsgVersion) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
 	err := validateUserAgent(msg.UserAgent)
 	if err != nil {
 		return err
@@ -237,27 +236,6 @@ func NewMsgVersion(me *NetAddress, you *NetAddress, nonce uint64,
 		LastBlock:       lastBlock,
 		DisableRelayTx:  false,
 	}
-}
-
-// NewMsgVersionFromConn is a convenience function that extracts the remote
-// and local address from conn and returns a new bitcoin version message that
-// conforms to the Message interface.  See NewMsgVersion.
-func NewMsgVersionFromConn(conn net.Conn, nonce uint64,
-	lastBlock int32) (*MsgVersion, error) {
-
-	// Don't assume any services until we know otherwise.
-	lna, err := NewNetAddress(conn.LocalAddr(), 0)
-	if err != nil {
-		return nil, err
-	}
-
-	// Don't assume any services until we know otherwise.
-	rna, err := NewNetAddress(conn.RemoteAddr(), 0)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewMsgVersion(lna, rna, nonce, lastBlock), nil
 }
 
 // validateUserAgent checks userAgent length against MaxUserAgentLen

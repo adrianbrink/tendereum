@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2016 The btcsuite developers
+// Copyright (c) 2013-2017 The btcsuite developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -20,14 +20,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/connmgr"
 	"github.com/btcsuite/btcd/database"
 	_ "github.com/btcsuite/btcd/database/ffldb"
 	"github.com/btcsuite/btcd/mempool"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
-	flags "github.com/btcsuite/go-flags"
 	"github.com/btcsuite/go-socks/socks"
+	flags "github.com/jessevdk/go-flags"
 )
 
 const (
@@ -39,19 +41,23 @@ const (
 	defaultMaxPeers              = 125
 	defaultBanDuration           = time.Hour * 24
 	defaultBanThreshold          = 100
+	defaultConnectTimeout        = time.Second * 30
 	defaultMaxRPCClients         = 10
 	defaultMaxRPCWebsockets      = 25
 	defaultMaxRPCConcurrentReqs  = 20
-	defaultVerifyEnabled         = false
 	defaultDbType                = "ffldb"
 	defaultFreeTxRelayLimit      = 15.0
 	defaultBlockMinSize          = 0
 	defaultBlockMaxSize          = 750000
+	defaultBlockMinWeight        = 0
+	defaultBlockMaxWeight        = 3000000
 	blockMaxSizeMin              = 1000
-	blockMaxSizeMax              = wire.MaxBlockPayload - 1000
+	blockMaxSizeMax              = blockchain.MaxBlockBaseSize - 1000
+	blockMaxWeightMin            = 4000
+	blockMaxWeightMax            = blockchain.MaxBlockWeight - 4000
 	defaultGenerate              = false
-	defaultMaxOrphanTransactions = 1000
-	defaultMaxOrphanTxSize       = 5000
+	defaultMaxOrphanTransactions = 100
+	defaultMaxOrphanTxSize       = 100000
 	defaultSigCacheMaxSize       = 100000
 	sampleConfigFilename         = "sample-btcd.conf"
 	defaultTxIndex               = false
@@ -97,6 +103,7 @@ type config struct {
 	DisableBanning       bool          `long:"nobanning" description:"Disable banning of misbehaving peers"`
 	BanDuration          time.Duration `long:"banduration" description:"How long to ban misbehaving peers.  Valid time units are {s, m, h}.  Minimum 1 second"`
 	BanThreshold         uint32        `long:"banthreshold" description:"Maximum allowed ban score before disconnecting and banning misbehaving peers."`
+	Whitelists           []string      `long:"whitelist" description:"Add an IP network or IP that will not be banned. (eg. 192.168.1.0/24 or ::1)"`
 	RPCUser              string        `short:"u" long:"rpcuser" description:"Username for RPC connections"`
 	RPCPass              string        `short:"P" long:"rpcpass" default-mask:"-" description:"Password for RPC connections"`
 	RPCLimitUser         string        `long:"rpclimituser" description:"Username for limited RPC connections"`
@@ -107,6 +114,7 @@ type config struct {
 	RPCMaxClients        int           `long:"rpcmaxclients" description:"Max number of RPC clients for standard connections"`
 	RPCMaxWebsockets     int           `long:"rpcmaxwebsockets" description:"Max number of RPC websocket connections"`
 	RPCMaxConcurrentReqs int           `long:"rpcmaxconcurrentreqs" description:"Max number of concurrent RPC requests that may be processed concurrently"`
+	RPCQuirks            bool          `long:"rpcquirks" description:"Mirror some JSON-RPC quirks of Bitcoin Core -- NOTE: Discouraged unless interoperability issues need to be worked around"`
 	DisableRPC           bool          `long:"norpc" description:"Disable built-in RPC server -- NOTE: The RPC server is disabled by default if no rpcuser/rpcpass or rpclimituser/rpclimitpass is specified"`
 	DisableTLS           bool          `long:"notls" description:"Disable TLS for the RPC server -- NOTE: This is only allowed if the RPC server is bound to localhost"`
 	DisableDNSSeed       bool          `long:"nodnsseed" description:"Disable DNS seeding for peers"`
@@ -122,6 +130,7 @@ type config struct {
 	TestNet3             bool          `long:"testnet" description:"Use the test network"`
 	RegressionTest       bool          `long:"regtest" description:"Use the regression test network"`
 	SimNet               bool          `long:"simnet" description:"Use the simulation test network"`
+	AddCheckpoints       []string      `long:"addcheckpoint" description:"Add a custom checkpoint.  Format: '<height>:<hash>'"`
 	DisableCheckpoints   bool          `long:"nocheckpoints" description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
 	DbType               string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	Profile              string        `long:"profile" description:"Enable HTTP profiling on given port -- NOTE port must be between 1024 and 65536"`
@@ -136,8 +145,10 @@ type config struct {
 	MiningAddrs          []string      `long:"miningaddr" description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
 	BlockMinSize         uint32        `long:"blockminsize" description:"Mininum block size in bytes to be used when creating a block"`
 	BlockMaxSize         uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block"`
+	BlockMinWeight       uint32        `long:"blockminweight" description:"Mininum block weight to be used when creating a block"`
+	BlockMaxWeight       uint32        `long:"blockmaxweight" description:"Maximum block weight to be used when creating a block"`
 	BlockPrioritySize    uint32        `long:"blockprioritysize" description:"Size in bytes for high-priority/low-fee transactions when creating a block"`
-	GetWorkKeys          []string      `long:"getworkkey" description:"DEPRECATED -- Use the --miningaddr option instead"`
+	UserAgentComments    []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
 	NoPeerBloomFilters   bool          `long:"nopeerbloomfilters" description:"Disable bloom filtering support"`
 	SigCacheMaxSize      uint          `long:"sigcachemaxsize" description:"The maximum number of entries in the signature verification cache"`
 	BlocksOnly           bool          `long:"blocksonly" description:"Do not accept transactions from remote peers."`
@@ -147,12 +158,13 @@ type config struct {
 	DropAddrIndex        bool          `long:"dropaddrindex" description:"Deletes the address-based transaction index from the database on start up and then exits."`
 	RelayNonStd          bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd         bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
-	onionlookup          func(string) ([]net.IP, error)
 	lookup               func(string) ([]net.IP, error)
-	oniondial            func(string, string) (net.Conn, error)
-	dial                 func(string, string) (net.Conn, error)
+	oniondial            func(string, string, time.Duration) (net.Conn, error)
+	dial                 func(string, string, time.Duration) (net.Conn, error)
+	addCheckpoints       []chaincfg.Checkpoint
 	miningAddrs          []btcutil.Address
 	minRelayTxFee        btcutil.Amount
+	whitelists           []*net.IPNet
 }
 
 // serviceOptions defines the configuration options for the daemon as a service on
@@ -304,6 +316,54 @@ func normalizeAddresses(addrs []string, defaultPort string) []string {
 	return removeDuplicateAddresses(addrs)
 }
 
+// newCheckpointFromStr parses checkpoints in the '<height>:<hash>' format.
+func newCheckpointFromStr(checkpoint string) (chaincfg.Checkpoint, error) {
+	parts := strings.Split(checkpoint, ":")
+	if len(parts) != 2 {
+		return chaincfg.Checkpoint{}, fmt.Errorf("unable to parse "+
+			"checkpoint %q -- use the syntax <height>:<hash>",
+			checkpoint)
+	}
+
+	height, err := strconv.ParseInt(parts[0], 10, 32)
+	if err != nil {
+		return chaincfg.Checkpoint{}, fmt.Errorf("unable to parse "+
+			"checkpoint %q due to malformed height", checkpoint)
+	}
+
+	if len(parts[1]) == 0 {
+		return chaincfg.Checkpoint{}, fmt.Errorf("unable to parse "+
+			"checkpoint %q due to missing hash", checkpoint)
+	}
+	hash, err := chainhash.NewHashFromStr(parts[1])
+	if err != nil {
+		return chaincfg.Checkpoint{}, fmt.Errorf("unable to parse "+
+			"checkpoint %q due to malformed hash", checkpoint)
+	}
+
+	return chaincfg.Checkpoint{
+		Height: int32(height),
+		Hash:   hash,
+	}, nil
+}
+
+// parseCheckpoints checks the checkpoint strings for valid syntax
+// ('<height>:<hash>') and parses them to chaincfg.Checkpoint instances.
+func parseCheckpoints(checkpointStrings []string) ([]chaincfg.Checkpoint, error) {
+	if len(checkpointStrings) == 0 {
+		return nil, nil
+	}
+	checkpoints := make([]chaincfg.Checkpoint, len(checkpointStrings))
+	for i, cpString := range checkpointStrings {
+		checkpoint, err := newCheckpointFromStr(cpString)
+		if err != nil {
+			return nil, err
+		}
+		checkpoints[i] = checkpoint
+	}
+	return checkpoints, nil
+}
+
 // filesExists reports whether the named file or directory exists.
 func fileExists(name string) bool {
 	if _, err := os.Stat(name); err != nil {
@@ -355,6 +415,8 @@ func loadConfig() (*config, []string, error) {
 		FreeTxRelayLimit:     defaultFreeTxRelayLimit,
 		BlockMinSize:         defaultBlockMinSize,
 		BlockMaxSize:         defaultBlockMaxSize,
+		BlockMinWeight:       defaultBlockMinWeight,
+		BlockMaxWeight:       defaultBlockMaxWeight,
 		BlockPrioritySize:    mempool.DefaultBlockPrioritySize,
 		MaxOrphanTxs:         defaultMaxOrphanTransactions,
 		SigCacheMaxSize:      defaultSigCacheMaxSize,
@@ -479,8 +541,8 @@ func loadConfig() (*config, []string, error) {
 		cfg.DisableDNSSeed = true
 	}
 	if numNets > 1 {
-		str := "%s: The testnet, regtest, and simnet params can't be " +
-			"used together -- choose one of the three"
+		str := "%s: The testnet, regtest, segnet, and simnet params " +
+			"can't be used together -- choose one of the four"
 		err := fmt.Errorf(str, funcName)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
@@ -527,9 +589,9 @@ func loadConfig() (*config, []string, error) {
 		os.Exit(0)
 	}
 
-	// Initialize logging at the default logging level.
-	initSeelogLogger(filepath.Join(cfg.LogDir, defaultLogFilename))
-	setLogLevels(defaultLogLevel)
+	// Initialize log rotation.  After log rotation has been initialized, the
+	// logger variables may be used.
+	initLogRotator(filepath.Join(cfg.LogDir, defaultLogFilename))
 
 	// Parse, validate, and set debug log level(s).
 	if err := parseAndSetDebugLevels(cfg.DebugLevel); err != nil {
@@ -562,12 +624,44 @@ func loadConfig() (*config, []string, error) {
 	}
 
 	// Don't allow ban durations that are too short.
-	if cfg.BanDuration < time.Duration(time.Second) {
+	if cfg.BanDuration < time.Second {
 		str := "%s: The banduration option may not be less than 1s -- parsed [%v]"
 		err := fmt.Errorf(str, funcName, cfg.BanDuration)
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, usageMessage)
 		return nil, nil, err
+	}
+
+	// Validate any given whitelisted IP addresses and networks.
+	if len(cfg.Whitelists) > 0 {
+		var ip net.IP
+		cfg.whitelists = make([]*net.IPNet, 0, len(cfg.Whitelists))
+
+		for _, addr := range cfg.Whitelists {
+			_, ipnet, err := net.ParseCIDR(addr)
+			if err != nil {
+				ip = net.ParseIP(addr)
+				if ip == nil {
+					str := "%s: The whitelist value of '%s' is invalid"
+					err = fmt.Errorf(str, funcName, addr)
+					fmt.Fprintln(os.Stderr, err)
+					fmt.Fprintln(os.Stderr, usageMessage)
+					return nil, nil, err
+				}
+				var bits int
+				if ip.To4() == nil {
+					// IPv6
+					bits = 128
+				} else {
+					bits = 32
+				}
+				ipnet = &net.IPNet{
+					IP:   ip,
+					Mask: net.CIDRMask(bits, bits),
+				}
+			}
+			cfg.whitelists = append(cfg.whitelists, ipnet)
+		}
 	}
 
 	// --addPeer and --connect do not mix.
@@ -626,6 +720,10 @@ func loadConfig() (*config, []string, error) {
 		cfg.DisableRPC = true
 	}
 
+	if cfg.DisableRPC {
+		btcdLog.Infof("RPC service is disabled")
+	}
+
 	// Default RPC to listen on localhost only.
 	if !cfg.DisableRPC && len(cfg.RPCListeners) == 0 {
 		addrs, err := net.LookupHost("localhost")
@@ -671,6 +769,19 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
+	// Limit the max block weight to a sane value.
+	if cfg.BlockMaxWeight < blockMaxWeightMin ||
+		cfg.BlockMaxWeight > blockMaxWeightMax {
+
+		str := "%s: The blockmaxweight option must be in between %d " +
+			"and %d -- parsed [%d]"
+		err := fmt.Errorf(str, funcName, blockMaxWeightMin,
+			blockMaxWeightMax, cfg.BlockMaxWeight)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
 	// Limit the max orphan count to a sane vlue.
 	if cfg.MaxOrphanTxs < 0 {
 		str := "%s: The maxorphantx option may not be less than 0 " +
@@ -684,6 +795,36 @@ func loadConfig() (*config, []string, error) {
 	// Limit the block priority and minimum block sizes to max block size.
 	cfg.BlockPrioritySize = minUint32(cfg.BlockPrioritySize, cfg.BlockMaxSize)
 	cfg.BlockMinSize = minUint32(cfg.BlockMinSize, cfg.BlockMaxSize)
+	cfg.BlockMinWeight = minUint32(cfg.BlockMinWeight, cfg.BlockMaxWeight)
+
+	switch {
+	// If the max block size isn't set, but the max weight is, then we'll
+	// set the limit for the max block size to a safe limit so weight takes
+	// precedence.
+	case cfg.BlockMaxSize == defaultBlockMaxSize &&
+		cfg.BlockMaxWeight != defaultBlockMaxWeight:
+
+		cfg.BlockMaxSize = blockchain.MaxBlockBaseSize - 1000
+
+	// If the max block weight isn't set, but the block size is, then we'll
+	// scale the set weight accordingly based on the max block size value.
+	case cfg.BlockMaxSize != defaultBlockMaxSize &&
+		cfg.BlockMaxWeight == defaultBlockMaxWeight:
+
+		cfg.BlockMaxWeight = cfg.BlockMaxSize * blockchain.WitnessScaleFactor
+	}
+
+	// Look for illegal characters in the user agent comments.
+	for _, uaComment := range cfg.UserAgentComments {
+		if strings.ContainsAny(uaComment, "/:()") {
+			err := fmt.Errorf("%s: The following characters must not "+
+				"appear in user agent comments: '/', ':', '(', ')'",
+				funcName)
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, usageMessage)
+			return nil, nil, err
+		}
+	}
 
 	// --txindex and --droptxindex do not mix.
 	if cfg.TxIndex && cfg.DropTxIndex {
@@ -717,30 +858,8 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Check getwork keys are valid and saved parsed versions.
-	cfg.miningAddrs = make([]btcutil.Address, 0, len(cfg.GetWorkKeys)+
-		len(cfg.MiningAddrs))
-	for _, strAddr := range cfg.GetWorkKeys {
-		addr, err := btcutil.DecodeAddress(strAddr,
-			activeNetParams.Params)
-		if err != nil {
-			str := "%s: getworkkey '%s' failed to decode: %v"
-			err := fmt.Errorf(str, funcName, strAddr, err)
-			fmt.Fprintln(os.Stderr, err)
-			fmt.Fprintln(os.Stderr, usageMessage)
-			return nil, nil, err
-		}
-		if !addr.IsForNet(activeNetParams.Params) {
-			str := "%s: getworkkey '%s' is on the wrong network"
-			err := fmt.Errorf(str, funcName, strAddr)
-			fmt.Fprintln(os.Stderr, err)
-			fmt.Fprintln(os.Stderr, usageMessage)
-			return nil, nil, err
-		}
-		cfg.miningAddrs = append(cfg.miningAddrs, addr)
-	}
-
 	// Check mining addresses are valid and saved parsed versions.
+	cfg.miningAddrs = make([]btcutil.Address, 0, len(cfg.MiningAddrs))
 	for _, strAddr := range cfg.MiningAddrs {
 		addr, err := btcutil.DecodeAddress(strAddr, activeNetParams.Params)
 		if err != nil {
@@ -818,6 +937,25 @@ func loadConfig() (*config, []string, error) {
 	cfg.ConnectPeers = normalizeAddresses(cfg.ConnectPeers,
 		activeNetParams.DefaultPort)
 
+	// --noonion and --onion do not mix.
+	if cfg.NoOnion && cfg.OnionProxy != "" {
+		err := fmt.Errorf("%s: the --noonion and --onion options may "+
+			"not be activated at the same time", funcName)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
+	// Check the checkpoints for syntax errors.
+	cfg.addCheckpoints, err = parseCheckpoints(cfg.AddCheckpoints)
+	if err != nil {
+		str := "%s: Error parsing checkpoints: %v"
+		err := fmt.Errorf(str, funcName, err)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
+
 	// Tor stream isolation requires either proxy or onion proxy to be set.
 	if cfg.TorIsolation && cfg.Proxy == "" && cfg.OnionProxy == "" {
 		str := "%s: Tor stream isolation requires either proxy or " +
@@ -829,12 +967,12 @@ func loadConfig() (*config, []string, error) {
 	}
 
 	// Setup dial and DNS resolution (lookup) functions depending on the
-	// specified options.  The default is to use the standard net.Dial
-	// function as well as the system DNS resolver.  When a proxy is
-	// specified, the dial function is set to the proxy specific dial
-	// function and the lookup is set to use tor (unless --noonion is
+	// specified options.  The default is to use the standard
+	// net.DialTimeout function as well as the system DNS resolver.  When a
+	// proxy is specified, the dial function is set to the proxy specific
+	// dial function and the lookup is set to use tor (unless --noonion is
 	// specified in which case the system DNS resolver is used).
-	cfg.dial = net.Dial
+	cfg.dial = net.DialTimeout
 	cfg.lookup = net.LookupIP
 	if cfg.Proxy != "" {
 		_, _, err := net.SplitHostPort(cfg.Proxy)
@@ -846,8 +984,14 @@ func loadConfig() (*config, []string, error) {
 			return nil, nil, err
 		}
 
-		if cfg.TorIsolation &&
+		// Tor isolation flag means proxy credentials will be overridden
+		// unless there is also an onion proxy configured in which case
+		// that one will be overridden.
+		torIsolation := false
+		if cfg.TorIsolation && cfg.OnionProxy == "" &&
 			(cfg.ProxyUser != "" || cfg.ProxyPass != "") {
+
+			torIsolation = true
 			fmt.Fprintln(os.Stderr, "Tor isolation set -- "+
 				"overriding specified proxy user credentials")
 		}
@@ -856,24 +1000,26 @@ func loadConfig() (*config, []string, error) {
 			Addr:         cfg.Proxy,
 			Username:     cfg.ProxyUser,
 			Password:     cfg.ProxyPass,
-			TorIsolation: cfg.TorIsolation,
+			TorIsolation: torIsolation,
 		}
-		cfg.dial = proxy.Dial
-		if !cfg.NoOnion {
+		cfg.dial = proxy.DialTimeout
+
+		// Treat the proxy as tor and perform DNS resolution through it
+		// unless the --noonion flag is set or there is an
+		// onion-specific proxy configured.
+		if !cfg.NoOnion && cfg.OnionProxy == "" {
 			cfg.lookup = func(host string) ([]net.IP, error) {
 				return connmgr.TorLookupIP(host, cfg.Proxy)
 			}
 		}
 	}
 
-	// Setup onion address dial and DNS resolution (lookup) functions
-	// depending on the specified options.  The default is to use the
-	// same dial and lookup functions selected above.  However, when an
-	// onion-specific proxy is specified, the onion address dial and
-	// lookup functions are set to use the onion-specific proxy while
-	// leaving the normal dial and lookup functions as selected above.
-	// This allows .onion address traffic to be routed through a different
-	// proxy than normal traffic.
+	// Setup onion address dial function depending on the specified options.
+	// The default is to use the same dial function selected above.  However,
+	// when an onion-specific proxy is specified, the onion address dial
+	// function is set to use the onion-specific proxy while leaving the
+	// normal dial function as selected above.  This allows .onion address
+	// traffic to be routed through a different proxy than normal traffic.
 	if cfg.OnionProxy != "" {
 		_, _, err := net.SplitHostPort(cfg.OnionProxy)
 		if err != nil {
@@ -884,6 +1030,8 @@ func loadConfig() (*config, []string, error) {
 			return nil, nil, err
 		}
 
+		// Tor isolation flag means onion proxy credentials will be
+		// overridden.
 		if cfg.TorIsolation &&
 			(cfg.OnionProxyUser != "" || cfg.OnionProxyPass != "") {
 			fmt.Fprintln(os.Stderr, "Tor isolation set -- "+
@@ -891,30 +1039,33 @@ func loadConfig() (*config, []string, error) {
 				"credentials ")
 		}
 
-		cfg.oniondial = func(a, b string) (net.Conn, error) {
+		cfg.oniondial = func(network, addr string, timeout time.Duration) (net.Conn, error) {
 			proxy := &socks.Proxy{
 				Addr:         cfg.OnionProxy,
 				Username:     cfg.OnionProxyUser,
 				Password:     cfg.OnionProxyPass,
 				TorIsolation: cfg.TorIsolation,
 			}
-			return proxy.Dial(a, b)
+			return proxy.DialTimeout(network, addr, timeout)
 		}
-		cfg.onionlookup = func(host string) ([]net.IP, error) {
-			return connmgr.TorLookupIP(host, cfg.OnionProxy)
+
+		// When configured in bridge mode (both --onion and --proxy are
+		// configured), it means that the proxy configured by --proxy is
+		// not a tor proxy, so override the DNS resolution to use the
+		// onion-specific proxy.
+		if cfg.Proxy != "" {
+			cfg.lookup = func(host string) ([]net.IP, error) {
+				return connmgr.TorLookupIP(host, cfg.OnionProxy)
+			}
 		}
 	} else {
 		cfg.oniondial = cfg.dial
-		cfg.onionlookup = cfg.lookup
 	}
 
-	// Specifying --noonion means the onion address dial and DNS resolution
-	// (lookup) functions result in an error.
+	// Specifying --noonion means the onion address dial function results in
+	// an error.
 	if cfg.NoOnion {
-		cfg.oniondial = func(a, b string) (net.Conn, error) {
-			return nil, errors.New("tor has been disabled")
-		}
-		cfg.onionlookup = func(a string) ([]net.IP, error) {
+		cfg.oniondial = func(a, b string, t time.Duration) (net.Conn, error) {
 			return nil, errors.New("tor has been disabled")
 		}
 	}
@@ -983,9 +1134,9 @@ func createDefaultConfigFile(destinationPath string) error {
 		}
 
 		if strings.Contains(line, "rpcuser=") {
-			line = "rpcuser=" + string(generatedRPCUser) + "\n"
+			line = "rpcuser=" + generatedRPCUser + "\n"
 		} else if strings.Contains(line, "rpcpass=") {
-			line = "rpcpass=" + string(generatedRPCPass) + "\n"
+			line = "rpcpass=" + generatedRPCPass + "\n"
 		}
 
 		if _, err := dest.WriteString(line); err != nil {
@@ -1001,23 +1152,25 @@ func createDefaultConfigFile(destinationPath string) error {
 // example, .onion addresses will be dialed using the onion specific proxy if
 // one was specified, but will otherwise use the normal dial function (which
 // could itself use a proxy or not).
-func btcdDial(network, address string) (net.Conn, error) {
-	if strings.Contains(address, ".onion:") {
-		return cfg.oniondial(network, address)
+func btcdDial(addr net.Addr) (net.Conn, error) {
+	if strings.Contains(addr.String(), ".onion:") {
+		return cfg.oniondial(addr.Network(), addr.String(),
+			defaultConnectTimeout)
 	}
-	return cfg.dial(network, address)
+	return cfg.dial(addr.Network(), addr.String(), defaultConnectTimeout)
 }
 
-// btcdLookup returns the correct DNS lookup function to use depending on the
-// passed host and configuration options.  For example, .onion addresses will be
-// resolved using the onion specific proxy if one was specified, but will
-// otherwise treat the normal proxy as tor unless --noonion was specified in
-// which case the lookup will fail.  Meanwhile, normal IP addresses will be
-// resolved using tor if a proxy was specified unless --noonion was also
-// specified in which case the normal system DNS resolver will be used.
+// btcdLookup resolves the IP of the given host using the correct DNS lookup
+// function depending on the configuration options.  For example, addresses will
+// be resolved using tor when the --proxy flag was specified unless --noonion
+// was also specified in which case the normal system DNS resolver will be used.
+//
+// Any attempt to resolve a tor address (.onion) will return an error since they
+// are not intended to be resolved outside of the tor proxy.
 func btcdLookup(host string) ([]net.IP, error) {
 	if strings.HasSuffix(host, ".onion") {
-		return cfg.onionlookup(host)
+		return nil, fmt.Errorf("attempt to resolve tor address %s", host)
 	}
+
 	return cfg.lookup(host)
 }

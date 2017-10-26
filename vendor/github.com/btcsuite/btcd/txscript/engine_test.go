@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2016 The btcsuite developers
+// Copyright (c) 2013-2017 The btcsuite developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -54,7 +54,7 @@ func TestBadPC(t *testing.T) {
 	pkScript := mustParseShortForm("NOP")
 
 	for _, test := range tests {
-		vm, err := NewEngine(pkScript, tx, 0, 0, nil)
+		vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, -1)
 		if err != nil {
 			t.Errorf("Failed to create script: %v", err)
 		}
@@ -111,7 +111,7 @@ func TestCheckErrorCondition(t *testing.T) {
 	pkScript := mustParseShortForm("NOP NOP NOP NOP NOP NOP NOP NOP NOP" +
 		" NOP TRUE")
 
-	vm, err := NewEngine(pkScript, tx, 0, 0, nil)
+	vm, err := NewEngine(pkScript, tx, 0, 0, nil, nil, 0)
 	if err != nil {
 		t.Errorf("failed to create script: %v", err)
 	}
@@ -119,29 +119,24 @@ func TestCheckErrorCondition(t *testing.T) {
 	for i := 0; i < len(pkScript)-1; i++ {
 		done, err := vm.Step()
 		if err != nil {
-			t.Errorf("failed to step %dth time: %v", i, err)
-			return
+			t.Fatalf("failed to step %dth time: %v", i, err)
 		}
 		if done {
-			t.Errorf("finshed early on %dth time", i)
-			return
+			t.Fatalf("finshed early on %dth time", i)
 		}
 
 		err = vm.CheckErrorCondition(false)
-		if err != ErrStackScriptUnfinished {
-			t.Errorf("got unexepected error %v on %dth iteration",
+		if !IsErrorCode(err, ErrScriptUnfinished) {
+			t.Fatalf("got unexepected error %v on %dth iteration",
 				err, i)
-			return
 		}
 	}
 	done, err := vm.Step()
 	if err != nil {
-		t.Errorf("final step failed %v", err)
-		return
+		t.Fatalf("final step failed %v", err)
 	}
 	if !done {
-		t.Errorf("final step isn't done!")
-		return
+		t.Fatalf("final step isn't done!")
 	}
 
 	err = vm.CheckErrorCondition(false)
@@ -192,8 +187,8 @@ func TestInvalidFlagCombinations(t *testing.T) {
 	pkScript := []byte{OP_NOP}
 
 	for i, test := range tests {
-		_, err := NewEngine(pkScript, tx, 0, test, nil)
-		if err != ErrInvalidFlags {
+		_, err := NewEngine(pkScript, tx, 0, test, nil, nil, -1)
+		if !IsErrorCode(err, ErrInvalidFlags) {
 			t.Fatalf("TestInvalidFlagCombinations #%d unexpected "+
 				"error: %v", i, err)
 		}

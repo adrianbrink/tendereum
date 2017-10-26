@@ -1,4 +1,4 @@
-// Copyright (c) 2014 The btcsuite developers
+// Copyright (c) 2014-2017 The btcsuite developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -333,6 +333,19 @@ func NewGetInfoCmd() *GetInfoCmd {
 	return &GetInfoCmd{}
 }
 
+// GetMempoolEntryCmd defines the getmempoolentry JSON-RPC command.
+type GetMempoolEntryCmd struct {
+	TxID string
+}
+
+// NewGetMempoolEntryCmd returns a new instance which can be used to issue a
+// getmempoolentry JSON-RPC command.
+func NewGetMempoolEntryCmd(txHash string) *GetMempoolEntryCmd {
+	return &GetMempoolEntryCmd{
+		TxID: txHash,
+	}
+}
+
 // GetMempoolInfoCmd defines the getmempoolinfo JSON-RPC command.
 type GetMempoolInfoCmd struct{}
 
@@ -658,6 +671,14 @@ func NewSubmitBlockCmd(hexBlock string, options *SubmitBlockOptions) *SubmitBloc
 	}
 }
 
+// UptimeCmd defines the uptime JSON-RPC command.
+type UptimeCmd struct{}
+
+// NewUptimeCmd returns a new instance which can be used to issue an uptime JSON-RPC command.
+func NewUptimeCmd() *UptimeCmd {
+	return &UptimeCmd{}
+}
+
 // ValidateAddressCmd defines the validateaddress JSON-RPC command.
 type ValidateAddressCmd struct {
 	Address string
@@ -741,6 +762,7 @@ func init() {
 	MustRegisterCmd("getgenerate", (*GetGenerateCmd)(nil), flags)
 	MustRegisterCmd("gethashespersec", (*GetHashesPerSecCmd)(nil), flags)
 	MustRegisterCmd("getinfo", (*GetInfoCmd)(nil), flags)
+	MustRegisterCmd("getmempoolentry", (*GetMempoolEntryCmd)(nil), flags)
 	MustRegisterCmd("getmempoolinfo", (*GetMempoolInfoCmd)(nil), flags)
 	MustRegisterCmd("getmininginfo", (*GetMiningInfoCmd)(nil), flags)
 	MustRegisterCmd("getnetworkinfo", (*GetNetworkInfoCmd)(nil), flags)
@@ -763,6 +785,7 @@ func init() {
 	MustRegisterCmd("setgenerate", (*SetGenerateCmd)(nil), flags)
 	MustRegisterCmd("stop", (*StopCmd)(nil), flags)
 	MustRegisterCmd("submitblock", (*SubmitBlockCmd)(nil), flags)
+	MustRegisterCmd("uptime", (*UptimeCmd)(nil), flags)
 	MustRegisterCmd("validateaddress", (*ValidateAddressCmd)(nil), flags)
 	MustRegisterCmd("verifychain", (*VerifyChainCmd)(nil), flags)
 	MustRegisterCmd("verifymessage", (*VerifyMessageCmd)(nil), flags)
