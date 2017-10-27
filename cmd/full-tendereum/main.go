@@ -1,3 +1,7 @@
+/*
+Full Tendereum starts Tendermint Core, Tendereum and an RPC server. This is a full node that can be
+a validator.
+*/
 package main
 
 import (
@@ -5,7 +9,7 @@ import (
 
 	"github.com/tendermint/tmlibs/cli"
 
-	"github.com/cosmos/tendereum/cmd/tendereum/commands"
+	"github.com/cosmos/tendereum/cmd/full-tendereum/commands"
 )
 
 func main() {

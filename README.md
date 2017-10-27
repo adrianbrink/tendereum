@@ -69,6 +69,8 @@ cmd package     =             |    =       ^      ^      ^  =
 ### RPC Server
 The RPC server does not talk to the application directly. It only connects to Tendermint Core.
 Even when it runs against a local Tendermint Core node it does full light-client verification.
+* implements Web3, Eth and Net namespaces only
+* In the future we might support whisper
 
 ### Console
 The console sits on top of the RPC server and is just another client.
@@ -80,6 +82,12 @@ The console sits on top of the RPC server and is just another client.
     * IBC
     * Staking
 
+### Accounts
+Tendereum does no account management or key handling. This all sits on top of the RPC
+server and has to be implemented on the UI client side.
+In the future we could decide to also include libraries for easy account management,
+but it would only be for importing and they would not be used by Tendereum itself.
+
 ### Staking
 * currently gas gets credited to the coinbase
 * block rewards should be distributed equally across all validators
@@ -89,5 +97,16 @@ The console sits on top of the RPC server and is just another client.
 ### Web3
 * extend the Web3 api in a backwards compatible manner to include staking and IBC
 transactions
+* we don't implement the management API (admin, debug, miner, personal, txpool)
+  * personal should be handled on the client side
+  * miner is not needed
+  * txpool is exposed by tendermint core
+  * debug maybe in the future
+  * admin maybe in the future
 
+  * generally the management api might be implemented in the future as a separate
+  process that combines Tendermint Core and Tendereum APIs
 
+### Native Dapps
+* explain how to use abigen to interact with contract/ethereum state through go code
+  * https://github.com/ethereum/go-ethereum/wiki/Native-DApps:-Go-bindings-to-Ethereum-contracts
