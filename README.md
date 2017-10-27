@@ -73,10 +73,21 @@ Even when it runs against a local Tendermint Core node it does full light-client
 ### Console
 The console sits on top of the RPC server and is just another client.
 
+### App package
+* maintains two separate states
+  * EVM state
+  * Cosmos state
+    * IBC
+    * Staking
+
 ### Staking
 * currently gas gets credited to the coinbase
 * block rewards should be distributed equally across all validators
 
 ### IBC
+
+### Web3
+* extend the Web3 api in a backwards compatible manner to include staking and IBC
+transactions
 
 
