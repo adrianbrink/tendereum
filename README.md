@@ -31,10 +31,11 @@ work, since it is just a normal Ethereum transaction.
                 =============================================
 ============    =  ===============         ===============  =       
 =          =    =  = RPC Server  =         = Tendereum   =  =
-=  Web3    <---------->          = <------ = Application =  =
+=  Web3    <---------->          =         = Application =  = app package
 =  RPC     =    =  = - Web3 Imp. =         = - EVM       =  =
 =  Client  =    =  =             =         = - State     =  =
-=          =    =  =             =         = - UX        =  =
+= console  =    =  = rpc package =         = - UX        =  =
+= package  =    =  =             =         =             =  =
 ============    =  =             =         =             =  =
                 =  =             =         =             =  =
                 =  ===============         ===============  =
@@ -42,15 +43,16 @@ work, since it is just a normal Ethereum transaction.
                 ==============|===================|==========
                               | Txs               | Txs
                 ==============|===================|==========
-                =             |                   |         =
-                =             |            ===============  =                                             
-                =             |            = ABCI Server =  = 
-                =             |            ===============  =
-                =             |            ^      ^      ^  =
-                =             |            |      |      |  =
-                =             |       ABCI |      |      |  =
-                =             |            |      |      |  =
-                =             v            v      v      v  =
+                =             |    =   full       |         =
+                =   light     |    =   tendereum  |         =
+                =   tenderum  |    =       ===============  =                                             
+                =             |    =       = ABCI Server =  = 
+                =             |    =       ===============  =
+cmd package     =             |    =       ^      ^      ^  =
+                =             |    =       |      |      |  =
+                =             |    =  ABCI |      |      |  =
+                =             |    =       |      |      |  =
+                =             v    =       v      v      v  =
                 = ========================================= =  
                 = =          Tendermint Core              = =
                 = ========================================= =  
@@ -64,10 +66,17 @@ work, since it is just a normal Ethereum transaction.
 
 ### CLI
 
+### RPC Server
+The RPC server does not talk to the application directly. It only connects to Tendermint Core.
+Even when it runs against a local Tendermint Core node it does full light-client verification.
+
+### Console
+The console sits on top of the RPC server and is just another client.
+
 ### Staking
 * currently gas gets credited to the coinbase
 * block rewards should be distributed equally across all validators
 
 ### IBC
 
-### Light client
+
