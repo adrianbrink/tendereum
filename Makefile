@@ -3,14 +3,21 @@ GOTOOLS := github.com/Masterminds/glide \
 
 PACKAGES := $(shell glide novendor)
 
-all: ensure_tools get_vendor_deps test linter install
+all: ensure_tools get_vendor_deps test linter install_full
 	@echo "--> Installing tools and dependencies, running tests and linters, and installing"
 
-install:
+install_full:
 	@echo "--> Running go install"
 	go install --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
-		./cmd/tendereum
+		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
+		./cmd/full-tendereum
+
+install_light:
+	@echo "--> Running go install"
+	go install --ldflags '-extldflags "-static"' \
+		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
+		./cmd/light-tendereum
+
 
 build:
 	@echo "--> Running go build --race"
