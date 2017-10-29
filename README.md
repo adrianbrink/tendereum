@@ -1,6 +1,11 @@
 # tendereum
 
-[![CircleCI](https://circleci.com/gh/cosmos/tendereum/tree/master.svg?style=svg)](https://circleci.com/gh/adrianbrink/tendereum/tree/master)
+[![CircleCI](https://img.shields.io/circleci/project/github/RedSparr0w/node-csgo-parser.svg)](https://circleci.com/gh/adrianbrink/tendereum/tree/master) [![Codecov](https://img.shields.io/codecov/c/github/codecov/example-python.svg)](https://codecov.io/gh/cosmos/tendereum) [![Go](https://img.shields.io/badge/go-1.9-blue.svg)](https://golang.org/doc/go1.9)
+
+[![Read the Docs](https://img.shields.io/readthedocs/pip.svg)](https://tendereum.readthedocs.io/en/latest/)  [![Godoc](https://img.shields.io/badge/godoc-1.9-blue.svg)](https://godoc.org/github.com/cosmos/tendereum) [![License](https://img.shields.io/badge/license-AGPL--3.0-yellowgreen.svg)](https://www.gnu.org/licenses/agpl-3.0.html) 
+
+[![Chat](https://img.shields.io/badge/Chat-Join-orange.svg)](https://riot.im/app/#/room/#tendereum:matrix.org) 
+
 
 ## Overview
 
