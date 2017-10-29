@@ -96,10 +96,11 @@ but it would only be for importing and they would not be used by Tendereum itsel
 ### Staking
 * currently gas gets credited to the coinbase
 * block rewards should be distributed equally across all validators
-* extend Web3 with a transaction type for staking
+* implemented as precompiled go contract
 
 ### IBC
 * extend Web3 with a transaction type for IBC
+* implemented as precompiled go contract
 
 ### Web3
 * extend the Web3 api in a backwards compatible manner to include staking and IBC
