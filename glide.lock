@@ -1,5 +1,5 @@
-hash: cc3667740984fbc7521526173ad7a7bdba3728872cb6f5a8b47c679f5c0db93c
-updated: 2017-10-26T14:14:00.65935+02:00
+hash: 495d4459e6a4f91bc419f43228a4c2c5d631be8cadc209eb3db3a081863ac5ab
+updated: 2017-10-29T15:23:03.417187+01:00
 imports:
 - name: github.com/aristanetworks/goarista
   version: 8ab803d6502ea1e05a8c9b73193b405291efb7ce
@@ -43,7 +43,7 @@ imports:
 - name: github.com/fsnotify/fsnotify
   version: 4da3e2cfbabc9f751898f250b49f2439785783a1
 - name: github.com/go-kit/kit
-  version: 4dc7be5d2d12881735283bcab7352178e190fc71
+  version: e2b298466b32c7cd5579a9b9b07e968fc9d9452c
   subpackages:
   - log
   - log/level
@@ -135,30 +135,28 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/tendermint/abci
-  version: 191c4b6d176169ffc7f9972d490fa362a3b7d940
+  version: dc33aad9b4e514a2322725ef68f27f72d955c537
   subpackages:
   - client
   - example/dummy
   - server
   - types
 - name: github.com/tendermint/ed25519
-  version: 1f52c6f8b8a5c7908aff4497c186af344b428925
+  version: d8387025d2b9d158cf4efb07e7ebf814bcce2057
   subpackages:
   - edwards25519
   - extra25519
 - name: github.com/tendermint/go-crypto
-  version: 0a5b1d979a1bc86200c9ff829fbbcd575799a1b6
+  version: dd20358a264c772b4a83e477b0cfce4c88a7001d
 - name: github.com/tendermint/go-wire
-  version: 99d2169a1e39c65983eacaa1da867d6f3218e1c9
+  version: 2baffcb6b690057568bc90ef1d457efb150b979a
   subpackages:
   - data
   - data/base58
-- name: github.com/tendermint/merkleeyes
-  version: 2f6e5d31e7a35045d8d0a5895cb1fec33dd4d32b
-  subpackages:
-  - iavl
+- name: github.com/tendermint/iavl
+  version: 595f3dcd5b6cd4a292e90757ae6d367fd7a6e653
 - name: github.com/tendermint/tendermint
-  version: d4634dc6832a7168c2536e7c71bfba4a8ca857be
+  version: e236302256b8b0b75441e8e44c6d0d3f5b5152c6
   subpackages:
   - blockchain
   - cmd/tendermint/commands
@@ -183,7 +181,7 @@ imports:
   - types
   - version
 - name: github.com/tendermint/tmlibs
-  version: 096dcb90e60aa00b748b3fe49a4b95e48ebf1e13
+  version: d9525c0fb671204450b160807480e1263053fb20
   subpackages:
   - autofile
   - cli
@@ -196,7 +194,7 @@ imports:
   - log
   - merkle
 - name: golang.org/x/crypto
-  version: 2509b142fb2b797aa7587dad548f113b2c0f20ce
+  version: edd5e9b0879d13ee6970a50153d85b8fec9f7686
   subpackages:
   - curve25519
   - nacl/box

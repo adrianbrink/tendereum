@@ -100,7 +100,8 @@ func (ta *TendereumApplication) Info(req types.RequestInfo) (res types.ResponseI
 	return res
 }
 
-// SetOption will not be used most likely. This could be useful to implement Web3 api that requires setting options, such as minimum gas price.
+// SetOption will not be used most likely. This could be useful to implement Web3 api that requires
+// setting options, such as minimum gas price.
 // Potentially this can be used to implement the management api.
 func (ta *TendereumApplication) SetOption(key, value string) (log string) {
 	log = fmt.Sprintf("Not yet implemented.")
