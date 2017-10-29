@@ -27,6 +27,10 @@ test:
 	@echo "--> Running go test --race"
 	go test -v -race $(PACKAGES)
 
+test_coverage:
+	@echo "--> Running go test --race --cover"
+	./devops/test_coverage.sh
+
 test_integration:
 	@echo "--> Running integration tests"
 	@echo "Not yet implemented"

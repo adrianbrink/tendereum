@@ -6,6 +6,9 @@ TODO.md
 # Local binaries
 build/
 
+# Coverage report
+coverage.txt
+
 ### Go ###
 # Binaries for programs and plugins
 *.exe
