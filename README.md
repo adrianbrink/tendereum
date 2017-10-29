@@ -91,8 +91,10 @@ but it would only be for importing and they would not be used by Tendereum itsel
 ### Staking
 * currently gas gets credited to the coinbase
 * block rewards should be distributed equally across all validators
+* extend Web3 with a transaction type for staking
 
 ### IBC
+* extend Web3 with a transaction type for IBC
 
 ### Web3
 * extend the Web3 api in a backwards compatible manner to include staking and IBC
@@ -110,3 +112,10 @@ transactions
 ### Native Dapps
 * explain how to use abigen to interact with contract/ethereum state through go code
   * https://github.com/ethereum/go-ethereum/wiki/Native-DApps:-Go-bindings-to-Ethereum-contracts
+
+
+### Validation
+* gasprice is enforced by the mempool locally
+* the app needs to keep track of the validator set
+  * a validator key needs to have a mapping to an Ethereum account
+  * block rewards and fees are equally split across all validators in EndBlock

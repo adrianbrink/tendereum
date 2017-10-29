@@ -100,14 +100,15 @@ func (ta *TendereumApplication) Info(req types.RequestInfo) (res types.ResponseI
 	return res
 }
 
-// SetOption will not be used most likely.
+// SetOption will not be used most likely. This could be useful to implement Web3 api that requires setting options, such as minimum gas price.
+// Potentially this can be used to implement the management api.
 func (ta *TendereumApplication) SetOption(key, value string) (log string) {
 	log = fmt.Sprintf("Not yet implemented.")
 	return log
 }
 
 // Query handles all RPC queries that the RPC server sends to Tendermint Core.
-// An example is getBalance().
+// This is used to implement the RPC server which can be run by a light-node or full-node.
 func (ta *TendereumApplication) Query(req types.RequestQuery) (res types.ResponseQuery) {
 	res = types.ResponseQuery{Code: types.CodeType_OK, Log: "Not yet implemented."}
 	return res

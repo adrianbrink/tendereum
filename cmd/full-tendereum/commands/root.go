@@ -21,10 +21,10 @@ var (
 	logger = log.NewTMLogger(log.NewSyncWriter(os.Stdout)).With("module", "main")
 )
 
+// nolint: lll
 func init() {
 	RootCmd.PersistentFlags().String(flagLogLevel, defaultLogLevel, "Log level")
-	RootCmd.PersistentFlags().String(flagAddress, "tcp://0.0.0.0:46658", `The address that Tendereum
-listens on for Tendermint Core`)
+	RootCmd.PersistentFlags().String(flagAddress, "tcp://0.0.0.0:46658", `The address that Tendereum listens on for Tendermint Core`)
 }
 
 // RootCmd is the root command for Tendereum.
