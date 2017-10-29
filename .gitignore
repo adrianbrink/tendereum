@@ -9,6 +9,9 @@ build/
 # Coverage report
 coverage.txt
 
+# RTD documentation website
+docs/_build
+
 ### Go ###
 # Binaries for programs and plugins
 *.exe
