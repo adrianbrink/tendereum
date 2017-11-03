@@ -45,6 +45,38 @@ type TendereumApplication struct {
 // Interface assertions
 var _ types.Application = (*TendereumApplication)(nil)
 
+// see the following for checking out how to do with precompiles:
+// https://github.com/cosmos/tendereum/blob/master/vendor/github.com/ethereum/go-ethereum/core/vm/evm.go#L40-L52
+// https://github.com/cosmos/tendereum/blob/master/vendor/github.com/ethereum/go-ethereum/core/vm/contracts.go#L49-L60
+//
+// echo is a silly start contract
+type echo struct{}
+
+var _ vm.PrecompiledContract = echo{}
+
+func (echo) RequiredGas(input []byte) uint64 { return 100 }
+func (echo) Run(input []byte) ([]byte, error) {
+	// input is a multiple of 32 bytes, each one an evm argument
+	// result the same
+
+	// example of return in the same order
+	// return input, nil
+
+	// example to return the arguments in reverse order
+	if len(input)%32 != 0 {
+		return nil, fmt.Errorf("Input must be a multiple of 32 bytes")
+	}
+	output := make([]byte, 0, len(input))
+	for l := len(input) - 32; l >= 0; l -= 32 {
+		output = append(output, input[l:l+32]...)
+	}
+	return output, nil
+}
+
+func init() {
+	vm.PrecompiledContractsByzantium[common.BytesToAddress([]byte{255})] = echo{}
+}
+
 // NewTendereumApplication returns a new instance of a Tendereum application.
 // NOTE: Pass in a config struct which allows the specification of a chain-id. The signer needs the
 // chain-id in order to provide replay protection.

@@ -31,8 +31,12 @@ run: build
 	./build/tendereum
 
 test:
-	@echo "--> Running go test --race"
+	@echo "--> Running go test -race"
 	go test -v -race $(PACKAGES)
+
+test_fast:
+	@echo "--> Running go test (no race)"
+	go test $(PACKAGES)
 
 test_coverage:
 	@echo "--> Running go test --race --cover"
