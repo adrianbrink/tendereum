@@ -127,6 +127,8 @@ type writeAheadState struct {
 // Info/Query connection
 
 // Info returns some basic information about Tendereum.
+// TODO: return hash and height info to do handshaking and recover after a restart
+// without re-running the entire chain
 func (ta *TendereumApplication) Info(req types.RequestInfo) (res types.ResponseInfo) {
 	res = types.ResponseInfo{Data: fmt.Sprintf("Tendereum"), Version: fmt.Sprintf("0.1.0")}
 	return res
@@ -142,7 +144,16 @@ func (ta *TendereumApplication) SetOption(key, value string) (log string) {
 
 // Query handles all RPC queries that the RPC server sends to Tendermint Core.
 // This is used to implement the RPC server which can be run by a light-node or full-node.
+// Note: many of the web3rpc endpoints need to be mapped to tendermint rpc about
+// blocks and headers and such...
 func (ta *TendereumApplication) Query(req types.RequestQuery) (res types.ResponseQuery) {
+	// must be compatible with http://godoc.org/pkg/github.com/ethereum/go-ethereum/ethclient/
+	// possibly via adaptors. note all methods there...
+
+	// see code at:
+	// http://godoc.org/pkg/github.com/ethereum/go-ethereum/internal/ethapi/#PublicBlockChainAPI
+	// https://godoc.org/github.com/ethereum/go-ethereum/internal/ethapi#PublicTransactionPoolAPI.SendTransaction
+
 	res = types.ResponseQuery{Code: types.CodeType_OK, Log: "Not yet implemented."}
 	return res
 }
@@ -208,11 +219,21 @@ func (ta *TendereumApplication) InitChain(req types.RequestInitChain) {
 // BeginBlock is called before a new block is started. It is called before any transaction is
 // submitted using DeliverTx.
 func (ta *TendereumApplication) BeginBlock(req types.RequestBeginBlock) {
+	// https://github.com/ethereum/go-ethereum/blob/master/core/blockchain.go#L955-L961
+	// some setup like here?
 }
 
 // DeliverTx delivers transactions that have been included in a finalised block.
 // Updates the state
+//
+// This function is a slight adaptation of core.ApplyTransaction
+// https://github.com/ethereum/go-ethereum/blob/master/core/state_processor.go#L86-L131
 func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
+	// What about this logic from Process?
+	// https://github.com/ethereum/go-ethereum/blob/master/core/state_processor.go#L72-L82
+	// at the least, we should do:
+	//   statedb.Prepare(tx.Hash(), block.Hash(), i)
+
 	var tx ethTypes.Transaction
 	if err := rlp.Decode(bytes.NewReader(data), &tx); err != nil {
 		return types.ErrBaseEncodingError
@@ -223,12 +244,22 @@ func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
 		return types.ErrInternalError
 	}
 
+	// look at https://github.com/ethereum/go-ethereum/blob/master/core/evm.go#L38-L59
 	context := vm.Context{
 		CanTransfer: core.CanTransfer,
 		Transfer:    core.Transfer,
 		GetHash:     func(uint64) common.Hash { return common.Hash{} },
 		Origin:      msg.From(),
-		GasPrice:    msg.GasPrice(),
+		// -> set to proposer (in header?)
+		// Coinbase:    beneficiary,
+		// -> get blocknumber and time from header
+		// BlockNumber: new(big.Int).Set(header.Number),
+		// Time:        new(big.Int).Set(header.Time),
+		// -> fake difficulty (or remove?)
+		// Difficulty:  new(big.Int).Set(header.Difficulty),
+		// -> GasLimit from a config?
+		// GasLimit:    new(big.Int).Set(header.GasLimit),
+		GasPrice: new(big.Int).Set(msg.GasPrice()),
 	}
 
 	evm := vm.NewEVM(context, ta.was.state, &ta.chainConfig, ta.vmConfig)
@@ -254,12 +285,20 @@ func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
 	receipt.Logs = ta.was.state.GetLogs(tx.Hash())
 	receipt.Bloom = ethTypes.CreateBloom(ethTypes.Receipts{receipt})
 
+	// store all receipts and logs...
+	ta.was.receipts = append(ta.was.receipts, receipt)
+	ta.was.allLogs = append(ta.was.allLogs, receipt.Logs...)
+
 	return types.Result{Code: types.CodeType_OK}
 }
 
 // EndBlock is called to signal the end of the current block. It is called after all transactions
 // have been delivered using DeliverTx.
 func (ta *TendereumApplication) EndBlock(height uint64) (res types.ResponseEndBlock) {
+	// https://github.com/ethereum/go-ethereum/blob/master/consensus/ethash/consensus.go#L509-L519
+	// 	 state.AddBalance(header.Coinbase, reward)
+
+	// TODO: add staking rules from precompiled staking contract and modify validators
 	res = types.ResponseEndBlock{}
 	return res
 }
@@ -267,6 +306,16 @@ func (ta *TendereumApplication) EndBlock(height uint64) (res types.ResponseEndBl
 // Commit is called to obtain a unique state root for inclusion in the next Tendermint Core block.
 // Writes all the changes to the state from DeliverTx to the underlying database.
 func (ta *TendereumApplication) Commit() (res types.Result) {
+	// https://github.com/ethereum/go-ethereum/blob/master/consensus/ethash/consensus.go#L514-L515
+	//   header.Root = ta.was.state.IntermediateRoot(true)
+
+	// Also, WriteBlockAndState
+	// https://github.com/ethereum/go-ethereum/blob/master/core/blockchain.go#L965-L982
+	// https://github.com/ethereum/go-ethereum/blob/master/core/blockchain.go#L806-L817
+
+	// make sure we store the receipts and logs with the bloom filter and all,
+	// so we can serve them up for web3 rpc requests
+
 	res = types.Result{Code: types.CodeType_OK, Log: "Not yet implemented."}
 	return res
 }
