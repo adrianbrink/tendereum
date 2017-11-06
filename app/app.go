@@ -146,12 +146,15 @@ func (ta *TendereumApplication) SetOption(key, value string) (log string) {
 // This is used to implement the RPC server which can be run by a light-node or full-node.
 // Note: many of the web3rpc endpoints need to be mapped to tendermint rpc about
 // blocks and headers and such...
+//
+// First for testing - query account balance
+// api: internal/ethapi/api.go:PublicBlockChainAPI.GetBalance
 func (ta *TendereumApplication) Query(req types.RequestQuery) (res types.ResponseQuery) {
 	// must be compatible with http://godoc.org/pkg/github.com/ethereum/go-ethereum/ethclient/
 	// possibly via adaptors. note all methods there...
 
 	// see code at:
-	// http://godoc.org/pkg/github.com/ethereum/go-ethereum/internal/ethapi/#PublicBlockChainAPI
+	// https://godoc.org/pkg/github.com/ethereum/go-ethereum/internal/ethapi/#PublicBlockChainAPI
 	// https://godoc.org/github.com/ethereum/go-ethereum/internal/ethapi#PublicTransactionPoolAPI.SendTransaction
 
 	res = types.ResponseQuery{Code: types.CodeType_OK, Log: "Not yet implemented."}
@@ -228,6 +231,9 @@ func (ta *TendereumApplication) BeginBlock(req types.RequestBeginBlock) {
 //
 // This function is a slight adaptation of core.ApplyTransaction
 // https://github.com/ethereum/go-ethereum/blob/master/core/state_processor.go#L86-L131
+//
+// api: internal/ethapi/api.go:PrivateAccountAPI.SendTransaction
+// also signs the tx with local wallet
 func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
 	// What about this logic from Process?
 	// https://github.com/ethereum/go-ethereum/blob/master/core/state_processor.go#L72-L82
