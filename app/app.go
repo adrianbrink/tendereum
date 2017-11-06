@@ -25,6 +25,10 @@ const (
 
 	// QueryBalance is query path to get balance
 	QueryBalance = "/balance"
+	// QueryNonce is query path to get nonce
+	QueryNonce = "/nonce"
+	// QueryCode is query path to get bytecode
+	QueryCode = "/code"
 )
 
 var (
@@ -230,12 +234,26 @@ func (ta *TendereumApplication) Query(req types.RequestQuery) (res types.Respons
 	switch req.Path {
 	case QueryBalance:
 		addr := common.BytesToAddress(req.Data)
-		// fmt.Printf("query: %x\n", addr[:])
 		bal := db.GetBalance(addr)
 		res = types.ResponseQuery{
 			Code: types.CodeType_OK,
 			// TODO: encode balance as binary in data
 			Log: bal.String(),
+		}
+	case QueryNonce:
+		addr := common.BytesToAddress(req.Data)
+		nonce := db.GetNonce(addr)
+		res = types.ResponseQuery{
+			Code: types.CodeType_OK,
+			// TODO: encode nonce as binary in data
+			Log: fmt.Sprintf("%d", nonce),
+		}
+	case QueryCode:
+		addr := common.BytesToAddress(req.Data)
+		code := db.GetCode(addr)
+		res = types.ResponseQuery{
+			Code:  types.CodeType_OK,
+			Value: code,
 		}
 	default:
 		res = types.ResponseQuery{
@@ -407,7 +425,22 @@ func (ta *TendereumApplication) Commit() (res types.Result) {
 	// make sure we store the receipts and logs with the bloom filter and all,
 	// so we can serve them up for web3 rpc requests
 
-	res = types.Result{Code: types.CodeType_OK, Log: "Not yet implemented."}
+	// TODO: something better, including snapshot, other data
+
+	// write the db, commit doesn't change hash
+	var err error
+	ta.committedHash, err = ta.was.state.CommitTo(ta.db, true)
+	ta.committedHeight++
+	if err != nil {
+		panic(err)
+	}
+
+	ta.checkTxState = ta.was.state.Copy()
+
+	res = types.Result{
+		Code: types.CodeType_OK,
+		Data: ta.committedHash[:],
+	}
 	return res
 }
 

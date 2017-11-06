@@ -96,12 +96,19 @@ func addrQuery(addr common.Address) types.RequestQuery {
 	}
 }
 
+func checkQuery(t *testing.T, app *TendereumApplication, addr common.Address, expected *big.Int) {
+	qres := app.Query(addrQuery(addr))
+	require.True(t, qres.GetCode().IsOK())
+	assert.Equal(t, expected.String(), qres.GetLog())
+}
+
 func TestGenesisQuery(t *testing.T) {
 	assert := assert.New(t)
 	require := require.New(t)
 
 	app, tearDown := setupTestCase(t)
 	defer tearDown(t)
+	og := app.was.state.IntermediateRoot(true)
 
 	// create three addresses
 	addr1 := common.StringToAddress("genesis")
@@ -120,18 +127,25 @@ func TestGenesisQuery(t *testing.T) {
 	require.Equal("Success", res)
 
 	// query values
-	qres1 := app.Query(addrQuery(addr1))
-	require.True(qres1.GetCode().IsOK())
-	assert.Equal(bal1.String(), qres1.GetLog())
-
-	qres2 := app.Query(addrQuery(addr2))
-	require.True(qres2.GetCode().IsOK())
-	assert.Equal(bal2.String(), qres2.GetLog())
-
-	qres3 := app.Query(addrQuery(addr3))
-	require.True(qres3.GetCode().IsOK())
-	assert.Equal(zero.String(), qres3.GetLog())
+	checkQuery(t, app, addr1, bal1)
+	checkQuery(t, app, addr2, bal2)
+	checkQuery(t, app, addr3, zero)
 
 	qbad := app.Query(types.RequestQuery{Path: "/bad path"})
 	assert.False(qbad.GetCode().IsOK())
+
+	// committing this data should update hash
+	cres := app.Commit()
+	require.True(cres.IsOK())
+	hash := common.BytesToHash(cres.Data)
+	assert.NotEqual(og, hash)
+
+	// queries should still work
+	checkQuery(t, app, addr2, bal2)
+
+	// commit again doesn't change anything
+	cres = app.Commit()
+	require.True(cres.IsOK())
+	hash2 := common.BytesToHash(cres.Data)
+	assert.Equal(hash, hash2)
 }
