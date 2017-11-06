@@ -88,3 +88,50 @@ func TestStore(t *testing.T) {
 	require.NoError(err)
 	assert.Equal(hash, commit)
 }
+
+func addrQuery(addr common.Address) types.RequestQuery {
+	return types.RequestQuery{
+		Path: QueryBalance,
+		Data: addr.Bytes(),
+	}
+}
+
+func TestGenesisQuery(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
+	app, tearDown := setupTestCase(t)
+	defer tearDown(t)
+
+	// create three addresses
+	addr1 := common.StringToAddress("genesis")
+	addr2 := common.StringToAddress("block")
+	addr3 := common.StringToAddress("fomo")
+
+	// two are granted balance in genesis
+	bal1 := big.NewInt(1234567890)
+	bal2 := big.NewInt(9988776655443322)
+	zero := big.NewInt(0)
+
+	// grant them
+	res := app.SetOption(string(addr1[:]), bal1.String())
+	require.Equal("Success", res)
+	res = app.SetOption(string(addr2[:]), bal2.String())
+	require.Equal("Success", res)
+
+	// query values
+	qres1 := app.Query(addrQuery(addr1))
+	require.True(qres1.GetCode().IsOK())
+	assert.Equal(bal1.String(), qres1.GetLog())
+
+	qres2 := app.Query(addrQuery(addr2))
+	require.True(qres2.GetCode().IsOK())
+	assert.Equal(bal2.String(), qres2.GetLog())
+
+	qres3 := app.Query(addrQuery(addr3))
+	require.True(qres3.GetCode().IsOK())
+	assert.Equal(zero.String(), qres3.GetLog())
+
+	qbad := app.Query(types.RequestQuery{Path: "/bad path"})
+	assert.False(qbad.GetCode().IsOK())
+}

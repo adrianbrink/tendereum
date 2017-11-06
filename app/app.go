@@ -22,6 +22,9 @@ import (
 
 const (
 	maxTxSize = 32768
+
+	// QueryBalance is query path to get balance
+	QueryBalance = "/balance"
 )
 
 var (
@@ -185,7 +188,7 @@ func (ta *TendereumApplication) SetOption(key, value string) (log string) {
 	// right now, only accounts
 
 	// TODO: remove/refactor this
-	addr := common.StringToAddress(key)
+	addr := common.BytesToAddress([]byte(key))
 	tmp := big.NewInt(0)
 	amount, ok := tmp.SetString(value, 0)
 	if !ok {
@@ -195,6 +198,14 @@ func (ta *TendereumApplication) SetOption(key, value string) (log string) {
 
 	db := ta.was.state
 	db.SetBalance(addr, amount)
+	// fmt.Printf("genesis: %d in %x\n", amount, addr[:])
+
+	// verify this for debugging
+	res := db.GetBalance(addr)
+	if res.Cmp(amount) != 0 {
+		return fmt.Sprintf("%s != %s", res, amount)
+	}
+
 	return "Success"
 }
 
@@ -217,9 +228,9 @@ func (ta *TendereumApplication) Query(req types.RequestQuery) (res types.Respons
 	// not the current delivertx state
 	db := ta.was.state
 	switch req.Path {
-	case "/balance":
-		var addr common.Address
-		copy(addr[:], req.Data)
+	case QueryBalance:
+		addr := common.BytesToAddress(req.Data)
+		// fmt.Printf("query: %x\n", addr[:])
 		bal := db.GetBalance(addr)
 		res = types.ResponseQuery{
 			Code: types.CodeType_OK,
