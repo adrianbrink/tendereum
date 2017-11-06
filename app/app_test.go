@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,14 +15,21 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	"github.com/tendermint/abci/types"
+	"github.com/tendermint/tmlibs/log"
 )
 
 func setupTestCase(t *testing.T) (app *TendereumApplication, tearDown func(t *testing.T)) {
 	t.Log("Setting up one test case.")
-	app = &TendereumApplication{}
+
+	logger := log.NewTMLogger(os.Stdout)
+	tmpDir, err := ioutil.TempDir("", "tendereum-apptest")
+	require.NoError(t, err)
+
+	app = NewTendereumApplication(tmpDir, logger)
 
 	tearDown = func(t *testing.T) {
 		t.Log("Tearing down one test case.")
+		os.RemoveAll(tmpDir)
 	}
 
 	return app, tearDown
@@ -37,8 +45,10 @@ func TestInfo(t *testing.T) {
 	req := types.RequestInfo{Version: fmt.Sprintf("0.11.0")}
 	res := app.Info(req)
 
-	assert.Equal(res, types.ResponseInfo{Data: fmt.Sprintf("Tendereum"),
-		Version: fmt.Sprintf("0.1.0")})
+	assert.Equal("Tendereum", res.Data)
+	assert.Equal("0.1.0", res.Version)
+	hash := common.BytesToHash(res.LastBlockAppHash)
+	assert.False(common.EmptyHash(hash))
 }
 
 func setupDB() (ethdb.Database, *state.StateDB, error) {
@@ -46,19 +56,7 @@ func setupDB() (ethdb.Database, *state.StateDB, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-
-	eth, err := ethdb.NewLDBDatabase(tmpDir, 16, 16)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	db, err := state.New(common.StringToHash(""),
-		state.NewDatabase(eth))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return eth, db, nil
+	return loadDB(tmpDir)
 }
 
 func TestStore(t *testing.T) {

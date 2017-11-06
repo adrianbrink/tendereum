@@ -24,6 +24,12 @@ const (
 	maxTxSize = 32768
 )
 
+var (
+	// maxGas is the maximum gas per block. This shouldn't be a constant, but
+	// I am not sure where to find/store the real value
+	maxGas = (*core.GasPool)(big.NewInt(1000 * 1000 * 1000))
+)
+
 // TendereumApplication is an application that sits on top of Tendermint Core. It provides wraps
 // an EVM and Ethereum state. It implements Query in order to service any RPC client.
 // nolint: megacheck, structcheck
@@ -33,13 +39,37 @@ type TendereumApplication struct {
 	db  ethdb.Database
 	was *writeAheadState
 
-	checkTxState *state.StateDB
+	checkTxState    *state.StateDB
+	committedHeight uint64
+	committedHash   common.Hash
 
 	chainConfig params.ChainConfig // evm tighly coupled to chainConfig
 	vmConfig    vm.Config
 	signer      ethTypes.Signer
+	maxGas      *core.GasPool
 
 	logger log.Logger
+}
+
+// nolint: megacheck, structcheck
+type writeAheadState struct {
+	state        *state.StateDB
+	txIndex      int
+	transactions []*ethTypes.Transaction
+	receipts     ethTypes.Receipts
+	allLogs      []*ethTypes.Log
+	totalUsedGas *big.Int
+	gasPool      *core.GasPool
+}
+
+func newWriteAheadState(st *state.StateDB, gasPool *core.GasPool) *writeAheadState {
+	// copy the pool... pointer to bigInt
+	gp := *gasPool
+	return &writeAheadState{
+		state:        st,
+		totalUsedGas: big.NewInt(0),
+		gasPool:      &gp,
+	}
 }
 
 // Interface assertions
@@ -81,7 +111,7 @@ func init() {
 // NOTE: Pass in a config struct which allows the specification of a chain-id. The signer needs the
 // chain-id in order to provide replay protection.
 // TODO: Pass in a config struct to provide the home directory.
-func NewTendereumApplication(logger log.Logger) *TendereumApplication {
+func NewTendereumApplication(dbDir string, logger log.Logger) *TendereumApplication {
 
 	chainConfig := params.ChainConfig{
 		ChainId:        big.NewInt(1),
@@ -96,28 +126,36 @@ func NewTendereumApplication(logger log.Logger) *TendereumApplication {
 		Ethash:         new(params.EthashConfig),
 	}
 
-	return &TendereumApplication{
+	eth, st, err := loadDB(dbDir)
+	if err != nil {
+		panic(err)
+	}
+	hash := st.IntermediateRoot(false)
+	// TODO: height should be stored somewhere
+	height := uint64(0)
+	was := newWriteAheadState(st, maxGas)
+
+	app := &TendereumApplication{
+		db:              eth,
+		was:             was,
+		checkTxState:    st.Copy(),
+		committedHash:   hash,
+		committedHeight: height,
+
 		// should set almost all options to 1 except for chain-id
 		// needs to ensure that chain-id is unique and doesn't conflict with other current
 		// networks.
 		chainConfig: chainConfig,
 		// TODO: Should be settable in order to enable EVM jit.
 		vmConfig: vm.Config{Tracer: vm.NewStructLogger(nil)},
+		maxGas:   maxGas,
+
 		// EIP155 signer implements replay attack by including the chain-id in the signature
 		signer: ethTypes.NewEIP155Signer(chainConfig.ChainId),
 		logger: logger,
 	}
-}
 
-// nolint: megacheck, structcheck
-type writeAheadState struct {
-	state        *state.StateDB
-	txIndex      int
-	transactions []*ethTypes.Transaction
-	receipts     ethTypes.Receipts
-	allLogs      []*ethTypes.Log
-	totalUsedGas *big.Int
-	gasPool      *core.GasPool
+	return app
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -130,7 +168,12 @@ type writeAheadState struct {
 // TODO: return hash and height info to do handshaking and recover after a restart
 // without re-running the entire chain
 func (ta *TendereumApplication) Info(req types.RequestInfo) (res types.ResponseInfo) {
-	res = types.ResponseInfo{Data: fmt.Sprintf("Tendereum"), Version: fmt.Sprintf("0.1.0")}
+	res = types.ResponseInfo{
+		Data:             fmt.Sprintf("Tendereum"),
+		Version:          fmt.Sprintf("0.1.0"),
+		LastBlockHeight:  ta.committedHeight,
+		LastBlockAppHash: ta.committedHash[:],
+	}
 	return res
 }
 
@@ -138,8 +181,21 @@ func (ta *TendereumApplication) Info(req types.RequestInfo) (res types.ResponseI
 // setting options, such as minimum gas price.
 // Potentially this can be used to implement the management api.
 func (ta *TendereumApplication) SetOption(key, value string) (log string) {
-	log = fmt.Sprintf("Not yet implemented.")
-	return log
+	// TODO: set data from the genesis file...
+	// right now, only accounts
+
+	// TODO: remove/refactor this
+	addr := common.StringToAddress(key)
+	tmp := big.NewInt(0)
+	amount, ok := tmp.SetString(value, 0)
+	if !ok {
+		msg := fmt.Sprintf("Cannot parse balance: %s", value)
+		panic(msg)
+	}
+
+	db := ta.was.state
+	db.SetBalance(addr, amount)
+	return "Success"
 }
 
 // Query handles all RPC queries that the RPC server sends to Tendermint Core.
@@ -157,7 +213,25 @@ func (ta *TendereumApplication) Query(req types.RequestQuery) (res types.Respons
 	// https://godoc.org/pkg/github.com/ethereum/go-ethereum/internal/ethapi/#PublicBlockChainAPI
 	// https://godoc.org/github.com/ethereum/go-ethereum/internal/ethapi#PublicTransactionPoolAPI.SendTransaction
 
-	res = types.ResponseQuery{Code: types.CodeType_OK, Log: "Not yet implemented."}
+	// TODO: this should read from committed state (also from old block),
+	// not the current delivertx state
+	db := ta.was.state
+	switch req.Path {
+	case "/balance":
+		var addr common.Address
+		copy(addr[:], req.Data)
+		bal := db.GetBalance(addr)
+		res = types.ResponseQuery{
+			Code: types.CodeType_OK,
+			// TODO: encode balance as binary in data
+			Log: bal.String(),
+		}
+	default:
+		res = types.ResponseQuery{
+			Code: types.CodeType_UnknownRequest,
+			Log:  "Not yet implemented.",
+		}
+	}
 	return res
 }
 
@@ -335,4 +409,22 @@ func decodeTx(data []byte) (*ethTypes.Transaction, error) {
 		return nil, err
 	}
 	return &tx, nil
+}
+
+// TODO: actually load with proper roots and all....
+func loadDB(dir string) (ethdb.Database, *state.StateDB, error) {
+	eth, err := ethdb.NewLDBDatabase(dir, 16, 16)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// TODO: how to get the latest hash....
+	// ideally we read from ethdb or such
+	hash := common.StringToHash("")
+	db, err := state.New(hash, state.NewDatabase(eth))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return eth, db, nil
 }
