@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"io/ioutil"
 	"math/big"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	"github.com/tendermint/abci/types"
@@ -148,4 +151,66 @@ func TestGenesisQuery(t *testing.T) {
 	require.True(cres.IsOK())
 	hash2 := common.BytesToHash(cres.Data)
 	assert.Equal(hash, hash2)
+}
+
+func TestSendTx(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
+	app, tearDown := setupTestCase(t)
+	defer tearDown(t)
+
+	// some constants
+	recv := common.StringToAddress("receive")
+	bal := big.NewInt(9988776655443322)
+	amount := big.NewInt(98765432100)
+
+	// make new key and address
+	priv, err := crypto.GenerateKey()
+	require.NoError(err)
+	pub := priv.Public()
+	ecPub := pub.(*ecdsa.PublicKey)
+	sender := crypto.PubkeyToAddress(*ecPub)
+
+	// grant initial tokens
+	res := app.SetOption(string(sender[:]), bal.String())
+	require.Equal("Success", res)
+
+	// commit genesis, and get initial root hash
+	cres := app.Commit()
+	require.True(cres.IsOK())
+	hash := common.BytesToHash(cres.Data)
+
+	// create tx
+	gasLimit := big.NewInt(1000000)
+	gasPrice := big.NewInt(100)
+	tx := ethTypes.NewTransaction(0, recv, amount, gasLimit, gasPrice, nil)
+
+	// sign it
+	tx, err = ethTypes.SignTx(tx, app.signer, priv)
+	require.NoError(err)
+	from, err := ethTypes.Sender(app.signer, tx)
+	require.NoError(err)
+	assert.Equal(sender, from)
+
+	// debug
+	fmt.Printf("Tx: %s\n", tx)
+
+	// generate bytes
+	txBytes, err := encodeTx(tx)
+	require.NoError(err)
+
+	// make sure checktx works
+	check := app.CheckTx(txBytes)
+	assert.True(check.IsOK(), check.Log)
+
+	// TODO: more with the delivery
+	del := app.DeliverTx(txBytes)
+	assert.True(del.IsOK(), del.Log)
+
+	// commit again, and very the hash changed
+	cres = app.Commit()
+	require.True(cres.IsOK())
+	hash2 := common.BytesToHash(cres.Data)
+	assert.NotEqual(hash, hash2)
 }

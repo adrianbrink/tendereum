@@ -121,7 +121,7 @@ func init() {
 func NewTendereumApplication(dbDir string, logger log.Logger) *TendereumApplication {
 
 	chainConfig := params.ChainConfig{
-		ChainId:        big.NewInt(1),
+		ChainId:        big.NewInt(42),
 		HomesteadBlock: new(big.Int),
 		DAOForkBlock:   new(big.Int),
 		DAOForkSupport: true,
@@ -279,20 +279,21 @@ func (ta *TendereumApplication) CheckTx(data []byte) types.Result {
 	}
 
 	if tx.Size() > maxTxSize {
-		return types.ErrInternalError
+		return types.ErrInternalError.AppendLog("too big")
 	}
 
 	if tx.Value().Sign() < 0 {
-		return types.ErrInternalError
+		return types.ErrInternalError.AppendLog("sent negative ETH")
 	}
 
 	from, err := ethTypes.Sender(ta.signer, tx)
 	if err != nil {
-		return types.ErrUnauthorized
+		return types.ErrUnauthorized.AppendLog(from.Hex())
 	}
 
-	if ta.checkTxState.GetNonce(from)+1 != tx.Nonce() {
-		return types.ErrBadNonce
+	expectNonce := ta.checkTxState.GetNonce(from)
+	if tx.Nonce() != expectNonce {
+		return types.ErrBadNonce.AppendLog(fmt.Sprintf("%d not %d", tx.Nonce(), expectNonce))
 	}
 
 	if ta.checkTxState.GetBalance(from).Cmp(tx.Cost()) < 0 {
@@ -302,7 +303,7 @@ func (ta *TendereumApplication) CheckTx(data []byte) types.Result {
 	// the last parameter is whether we are on homestead. It is always true.
 	intrGas := core.IntrinsicGas(tx.Data(), tx.To() == nil, true)
 	if tx.Gas().Cmp(intrGas) < 0 {
-		return types.ErrInternalError
+		return types.ErrInternalError.AppendLog("Insufficent gas")
 	}
 
 	// update current state to allow multiple transactions per block
@@ -350,7 +351,7 @@ func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
 
 	msg, err := tx.AsMessage(ta.signer)
 	if err != nil {
-		return types.ErrInternalError
+		return types.ErrInternalError.AppendLog("AsMessage()").AppendLog(err.Error())
 	}
 
 	// look at https://github.com/ethereum/go-ethereum/blob/master/core/evm.go#L38-L59
@@ -375,7 +376,7 @@ func (ta *TendereumApplication) DeliverTx(data []byte) (res types.Result) {
 	// NOTE: This deducts gas and credits it to the defined coinbase.
 	_, gas, failed, err := core.ApplyMessage(evm, msg, ta.was.gasPool)
 	if err != nil {
-		return types.ErrInternalError
+		return types.ErrInternalError.AppendLog("ApplyMessage()").AppendLog(err.Error())
 	}
 
 	ta.was.state.Finalise(true)
@@ -453,6 +454,14 @@ func decodeTx(data []byte) (*ethTypes.Transaction, error) {
 		return nil, err
 	}
 	return &tx, nil
+}
+
+func encodeTx(tx *ethTypes.Transaction) ([]byte, error) {
+	buf := bytes.NewBufferString("")
+	if err := rlp.Encode(buf, &tx); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // TODO: actually load with proper roots and all....
