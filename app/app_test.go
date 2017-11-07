@@ -92,17 +92,30 @@ func TestStore(t *testing.T) {
 	assert.Equal(hash, commit)
 }
 
-func addrQuery(addr common.Address) types.RequestQuery {
+func balanceQuery(addr common.Address) types.RequestQuery {
 	return types.RequestQuery{
 		Path: QueryBalance,
 		Data: addr.Bytes(),
 	}
 }
 
-func checkQuery(t *testing.T, app *TendereumApplication, addr common.Address, expected *big.Int) {
-	qres := app.Query(addrQuery(addr))
+func nonceQuery(addr common.Address) types.RequestQuery {
+	return types.RequestQuery{
+		Path: QueryNonce,
+		Data: addr.Bytes(),
+	}
+}
+
+func checkBalance(t *testing.T, app *TendereumApplication, addr common.Address, expected *big.Int) {
+	qres := app.Query(balanceQuery(addr))
 	require.True(t, qres.GetCode().IsOK())
 	assert.Equal(t, expected.String(), qres.GetLog())
+}
+
+func checkNonce(t *testing.T, app *TendereumApplication, addr common.Address, expected uint64) {
+	qres := app.Query(nonceQuery(addr))
+	require.True(t, qres.GetCode().IsOK())
+	assert.Equal(t, fmt.Sprintf("%d", expected), qres.GetLog())
 }
 
 func TestGenesisQuery(t *testing.T) {
@@ -130,9 +143,10 @@ func TestGenesisQuery(t *testing.T) {
 	require.Equal("Success", res)
 
 	// query values
-	checkQuery(t, app, addr1, bal1)
-	checkQuery(t, app, addr2, bal2)
-	checkQuery(t, app, addr3, zero)
+	checkBalance(t, app, addr1, bal1)
+	checkBalance(t, app, addr2, bal2)
+	checkBalance(t, app, addr3, zero)
+	checkNonce(t, app, addr1, 0)
 
 	qbad := app.Query(types.RequestQuery{Path: "/bad path"})
 	assert.False(qbad.GetCode().IsOK())
@@ -144,7 +158,7 @@ func TestGenesisQuery(t *testing.T) {
 	assert.NotEqual(og, hash)
 
 	// queries should still work
-	checkQuery(t, app, addr2, bal2)
+	checkBalance(t, app, addr2, bal2)
 
 	// commit again doesn't change anything
 	cres = app.Commit()
@@ -204,7 +218,8 @@ func TestSendTx(t *testing.T) {
 	check := app.CheckTx(txBytes)
 	assert.True(check.IsOK(), check.Log)
 
-	// TODO: more with the delivery
+	// check the delivery
+	checkNonce(t, app, sender, 0)
 	del := app.DeliverTx(txBytes)
 	assert.True(del.IsOK(), del.Log)
 
@@ -213,4 +228,12 @@ func TestSendTx(t *testing.T) {
 	require.True(cres.IsOK())
 	hash2 := common.BytesToHash(cres.Data)
 	assert.NotEqual(hash, hash2)
+
+	// verify state is good
+	checkNonce(t, app, sender, 1)
+	after := bal.Sub(bal, amount)
+	// where does this come from???
+	after.Sub(after, big.NewInt(2100000))
+	checkBalance(t, app, sender, after)
+
 }
