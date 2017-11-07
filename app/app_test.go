@@ -196,8 +196,9 @@ func TestSendTx(t *testing.T) {
 	hash := common.BytesToHash(cres.Data)
 
 	// create tx
-	gasLimit := big.NewInt(1000000)
-	gasPrice := big.NewInt(100)
+	// cutoff here...
+	gasLimit := big.NewInt(21000)
+	gasPrice := big.NewInt(50)
 	tx := ethTypes.NewTransaction(0, recv, amount, gasLimit, gasPrice, nil)
 
 	// sign it
@@ -233,7 +234,8 @@ func TestSendTx(t *testing.T) {
 	checkNonce(t, app, sender, 1)
 	after := bal.Sub(bal, amount)
 	// where does this come from???
-	after.Sub(after, big.NewInt(2100000))
+	gasPaid := big.NewInt(0).Mul(big.NewInt(21000), gasPrice)
+	after.Sub(after, gasPaid)
 	checkBalance(t, app, sender, after)
 
 }
