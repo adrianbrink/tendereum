@@ -83,7 +83,9 @@ func newWriteAheadState(st *state.StateDB, gasPool *core.GasPool) *writeAheadSta
 var _ types.Application = (*TendereumApplication)(nil)
 
 // see the following for checking out how to do with precompiles:
+// nolint: lll
 // https://github.com/cosmos/tendereum/blob/master/vendor/github.com/ethereum/go-ethereum/core/vm/evm.go#L40-L52
+// nolint: lll
 // https://github.com/cosmos/tendereum/blob/master/vendor/github.com/ethereum/go-ethereum/core/vm/contracts.go#L49-L60
 //
 // echo is a silly start contract
@@ -226,6 +228,7 @@ func (ta *TendereumApplication) Query(req types.RequestQuery) (res types.Respons
 
 	// see code at:
 	// https://godoc.org/pkg/github.com/ethereum/go-ethereum/internal/ethapi/#PublicBlockChainAPI
+	// nolint: lll
 	// https://godoc.org/github.com/ethereum/go-ethereum/internal/ethapi#PublicTransactionPoolAPI.SendTransaction
 
 	// TODO: this should read from committed state (also from old block),
@@ -303,7 +306,7 @@ func (ta *TendereumApplication) CheckTx(data []byte) types.Result {
 	// the last parameter is whether we are on homestead. It is always true.
 	intrGas := core.IntrinsicGas(tx.Data(), tx.To() == nil, true)
 	if tx.Gas().Cmp(intrGas) < 0 {
-		return types.ErrInternalError.AppendLog("Insufficent gas")
+		return types.ErrInternalError.AppendLog("Insufficient gas")
 	}
 
 	// update current state to allow multiple transactions per block
@@ -448,6 +451,7 @@ func (ta *TendereumApplication) Commit() (res types.Result) {
 // ------------------------------------------------------------------------------------------------
 // Helpers
 
+// nolint: deadcode
 func decodeTx(data []byte) (*ethTypes.Transaction, error) {
 	var tx ethTypes.Transaction
 	if err := rlp.Decode(bytes.NewReader(data), &tx); err != nil {
@@ -456,6 +460,7 @@ func decodeTx(data []byte) (*ethTypes.Transaction, error) {
 	return &tx, nil
 }
 
+// nolint: deadcode
 func encodeTx(tx *ethTypes.Transaction) ([]byte, error) {
 	buf := bytes.NewBufferString("")
 	if err := rlp.Encode(buf, &tx); err != nil {

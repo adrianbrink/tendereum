@@ -1,3 +1,4 @@
+// nolint: vetshadow, errcheck
 package app
 
 import (
@@ -32,6 +33,7 @@ func setupTestCase(t *testing.T) (app *TendereumApplication, tearDown func(t *te
 
 	tearDown = func(t *testing.T) {
 		t.Log("Tearing down one test case.")
+		// nolint: errcheck
 		os.RemoveAll(tmpDir)
 	}
 
