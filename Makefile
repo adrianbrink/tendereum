@@ -24,15 +24,19 @@ build:
 	rm -rf build/tendereum
 	go build --ldflags '-extldflags "-static"' \
 		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
-		-race -o build/tendereum ./cmd/tendereum
+		-race -o build/tendereum ./cmd/full-tendereum
 
 run: build
 	@echo "--> Running Tendereum binary"
 	./build/tendereum
 
 test:
-	@echo "--> Running go test --race"
+	@echo "--> Running go test -race"
 	go test -v -race $(PACKAGES)
+
+test_fast:
+	@echo "--> Running go test (no race)"
+	go test $(PACKAGES)
 
 test_coverage:
 	@echo "--> Running go test --race --cover"
