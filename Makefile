@@ -24,7 +24,7 @@ build:
 	rm -rf build/tendereum
 	go build --ldflags '-extldflags "-static"' \
 		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
-		-race -o build/tendereum ./cmd/tendereum
+		-race -o build/tendereum ./cmd/full-tendereum
 
 run: build
 	@echo "--> Running Tendereum binary"

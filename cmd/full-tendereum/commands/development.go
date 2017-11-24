@@ -22,7 +22,7 @@ func connectDevelopment(cmd *cobra.Command, args []string) {
 	fmt.Println(`Should initialise all files for Tendermint and Tendereum and start all 
 necessary processes.`)
 
-	app := app.NewTendereumApplication(logger)
+	app := app.NewTendereumApplication(os.ExpandEnv("$HOME/.tendereum"), logger)
 
 	srv, err := startTendereum(app)
 	if err != nil {
