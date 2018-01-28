@@ -1,5 +1,5 @@
-hash: 495d4459e6a4f91bc419f43228a4c2c5d631be8cadc209eb3db3a081863ac5ab
-updated: 2017-10-29T15:23:03.417187+01:00
+hash: 094758a25b024b8c74a5a36213bdb5a784d7671ab9ab6ad00754c70cef106811
+updated: 2018-01-28T13:04:12.899451+01:00
 imports:
 - name: github.com/aristanetworks/goarista
   version: 8ab803d6502ea1e05a8c9b73193b405291efb7ce
@@ -9,6 +9,12 @@ imports:
   version: c7588cbf7690cd9f047a28efa2dcd8f2435a4e5e
   subpackages:
   - btcec
+- name: github.com/cosmos/tendereum
+  version: 3e66a35b33a049804726d286a38898e7e04c1de7
+  subpackages:
+  - app
+  - cmd/full-tendereum/commands
+  - version
 - name: github.com/ebuchman/fail-test
   version: 95f809107225be108efcf10a3509e4ea6ceef3c4
 - name: github.com/edsrzf/mmap-go
@@ -40,6 +46,14 @@ imports:
   - rlp
   - rpc
   - trie
+- name: github.com/ethereumproject/go-ethereum
+  version: 982743ea290ce0b9f30fb419a200f0e9ea6ca342
+  subpackages:
+  - common
+- name: github.com/ethereumproject/sputnikvm-ffi
+  version: a6c914124a94151706443826c8124896ab1473bc
+  subpackages:
+  - go/sputnikvm
 - name: github.com/fsnotify/fsnotify
   version: 4da3e2cfbabc9f751898f250b49f2439785783a1
 - name: github.com/go-kit/kit
@@ -147,9 +161,9 @@ imports:
   - edwards25519
   - extra25519
 - name: github.com/tendermint/go-crypto
-  version: dd20358a264c772b4a83e477b0cfce4c88a7001d
+  version: 67a47e6a0bf474a76f6a8f09b39cfdf382f39b90
 - name: github.com/tendermint/go-wire
-  version: 2baffcb6b690057568bc90ef1d457efb150b979a
+  version: 27be46e25124ddf775e23317a83647ce62a93f6b
   subpackages:
   - data
   - data/base58

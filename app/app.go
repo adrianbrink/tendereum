@@ -15,6 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"github.com/ethereumproject/sputnikvm-ffi/go/sputnikvm"
+
 	"github.com/tendermint/abci/types"
 
 	"github.com/tendermint/tmlibs/log"

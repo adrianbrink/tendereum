@@ -2,9 +2,9 @@
 
 [![CircleCI](https://img.shields.io/circleci/project/github/RedSparr0w/node-csgo-parser.svg)](https://circleci.com/gh/adrianbrink/tendereum/tree/master) [![Codecov](https://img.shields.io/codecov/c/github/codecov/example-python.svg)](https://codecov.io/gh/cosmos/tendereum) [![Go](https://img.shields.io/badge/go-1.9-blue.svg)](https://golang.org/doc/go1.9)
 
-[![Read the Docs](https://img.shields.io/readthedocs/pip.svg)](https://tendereum.readthedocs.io/en/latest/)  [![Godoc](https://img.shields.io/badge/godoc-1.9-blue.svg)](https://godoc.org/github.com/cosmos/tendereum) [![License](https://img.shields.io/badge/license-AGPL--3.0-yellowgreen.svg)](https://www.gnu.org/licenses/agpl-3.0.html) 
+[![Read the Docs](https://img.shields.io/readthedocs/pip.svg)](https://tendereum.readthedocs.io/en/latest/)  [![Godoc](https://img.shields.io/badge/godoc-1.9-blue.svg)](https://godoc.org/github.com/cosmos/tendereum) [![License](https://img.shields.io/badge/license-AGPL--3.0-yellowgreen.svg)](https://www.gnu.org/licenses/agpl-3.0.html)
 
-[![Chat](https://img.shields.io/badge/Chat-Join-orange.svg)](https://riot.im/app/#/room/#tendereum:matrix.org) 
+[![Chat](https://img.shields.io/badge/Chat-Join-orange.svg)](https://riot.im/app/#/room/#tendereum:matrix.org)
 
 
 ## Overview
@@ -28,13 +28,13 @@ already existing system. Moreover Tendereum provides a testbed for adding stakin
 systems. Here we can try different approaches such as staking contracts or native staking through
 the SDK. Furthermore, it should provide a way for users to submit IBC transactions. Implementing
 staking and ibc inside of smart contracts has the advantage that every existing web3 client would
-work, since it is just a normal Ethereum transaction. 
+work, since it is just a normal Ethereum transaction.
 
 ### Design
 
 ```
                 =============================================
-============    =  ===============         ===============  =       
+============    =  ===============         ===============  =
 =          =    =  = RPC Server  =         = Tendereum   =  =
 =  Web3    <---------->          =         = Application =  = app package
 =  RPC     =    =  = - Web3 Imp. =         = - EVM       =  =
@@ -50,19 +50,19 @@ work, since it is just a normal Ethereum transaction.
                 ==============|===================|==========
                 =             |    =   full       |         =
                 =   light     |    =   tendereum  |         =
-                =   tenderum  |    =       ===============  =                                             
-                =             |    =       = ABCI Server =  = 
+                =   tenderum  |    =       ===============  =
+                =             |    =       = ABCI Server =  =
                 =             |    =       ===============  =
 cmd package     =             |    =       ^      ^      ^  =
                 =             |    =       |      |      |  =
                 =             |    =  ABCI |      |      |  =
                 =             |    =       |      |      |  =
                 =             v    =       v      v      v  =
-                = ========================================= =  
+                = ========================================= =
                 = =          Tendermint Core              = =
-                = ========================================= =  
+                = ========================================= =
                 =                   ^                       =
-                ====================|========================  
+                ====================|========================
                                     |
                                     |
                                     v
@@ -118,6 +118,11 @@ transactions
 ### Native Dapps
 * explain how to use abigen to interact with contract/ethereum state through go code
   * https://github.com/ethereum/go-ethereum/wiki/Native-DApps:-Go-bindings-to-Ethereum-contracts
+
+
+### EVM
+Use [SputnikVM](https://github.com/ethereumproject/sputnikvm) instead of the
+go-ethereum VM.
 
 
 ### Validation

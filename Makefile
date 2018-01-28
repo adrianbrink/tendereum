@@ -6,29 +6,30 @@ PACKAGES := $(shell glide novendor)
 all: ensure_tools get_vendor_deps test linter install_full
 	@echo "--> Installing tools and dependencies, running tests and linters, and installing"
 
-install_full:
-	@echo "--> Running go install"
-	go install --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
-		./cmd/full-tendereum
+#install_full:
+#	@echo "--> Running go install"
+#	go install --ldflags '-extldflags "-static"' \
+#		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
+#		./cmd/full-tendereum
 
-install_light:
-	@echo "--> Running go install"
-	go install --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
-		./cmd/light-tendereum
+#install_light:
+#	@echo "--> Running go install"
+#	go install --ldflags '-extldflags "-static"' \
+#		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
+#		./cmd/light-tendereum
 
 
 build:
 	@echo "--> Running go build --race"
 	rm -rf build/tendereum
-	go build --ldflags '-extldflags "-static"' \
+	CGO_LDFLAGS="$(GOPATH)/src/github.com/adrianbrink/tendereum/vendor/github.com/ethereumproject/sputnikvm-ffi/c/libsputnikvm.a -ldl -lresolv" go build \
+		--ldflags '-extldflags "-static"' \
 		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
-		-race -o build/tendereum ./cmd/full-tendereum
+		-race -o build/full-tendereum ./cmd/full-tendereum
 
 run: build
 	@echo "--> Running Tendereum binary"
-	./build/tendereum
+	./build/full-tendereum
 
 test:
 	@echo "--> Running go test -race"

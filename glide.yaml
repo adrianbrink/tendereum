@@ -1,4 +1,4 @@
-package: github.com/cosmos/tendereum
+package: github.com/adrianbrink/tendereum
 import:
 - package: github.com/ethereum/go-ethereum
   version: v1.7.2
@@ -36,6 +36,9 @@ import:
   - cli/flags
   - common
   - log
+- package: github.com/ethereumproject/sputnikvm-ffi
+  subpackages:
+  - go/sputnikvm
 testImport:
 - package: github.com/stretchr/testify
   version: v1.1.4

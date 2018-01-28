@@ -1,0 +1,44 @@
+package: github.com/cosmos/tendereum
+import:
+- package: github.com/ethereum/go-ethereum
+  version: v1.7.2
+  subpackages:
+  - common
+  - core
+  - core/state
+  - core/types
+  - core/vm
+  - crypto
+  - ethdb
+  - params
+  - rlp
+- package: github.com/spf13/cobra
+  version: v0.0.1
+- package: github.com/spf13/viper
+  version: v1.0.0
+- package: github.com/tendermint/abci
+  version: v0.7.0
+  subpackages:
+  - server
+  - types
+- package: github.com/tendermint/tendermint
+  version: v0.12.0
+  subpackages:
+  - cmd/tendermint/commands
+  - config
+  - node
+  - proxy
+  - types
+- package: github.com/tendermint/tmlibs
+  version: v0.4.0
+  subpackages:
+  - cli
+  - cli/flags
+  - common
+  - log
+testImport:
+- package: github.com/stretchr/testify
+  version: v1.1.4
+  subpackages:
+  - assert
+  - require
