@@ -9,7 +9,7 @@ import (
 
 	"github.com/tendermint/tmlibs/cli"
 
-	"github.com/cosmos/tendereum/cmd/full-tendereum/commands"
+	"github.com/adrianbrink/tendereum/cmd/full-tendereum/commands"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/tendermint/tmlibs/common"
 
-	"github.com/cosmos/tendereum/app"
+	"github.com/adrianbrink/tendereum/app"
 )
 
 // DevelopmentCmd initialises all files and connects to a local development net.
@@ -19,7 +19,7 @@ var DevelopmentCmd = &cobra.Command{
 }
 
 func connectDevelopment(cmd *cobra.Command, args []string) {
-	fmt.Println(`Should initialise all files for Tendermint and Tendereum and start all 
+	fmt.Println(`Should initialise all files for Tendermint and Tendereum and start all
 necessary processes.`)
 
 	app := app.NewTendereumApplication(logger)

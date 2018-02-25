@@ -9,13 +9,13 @@ all: ensure_tools get_vendor_deps test linter install_full
 install_full:
 	@echo "--> Running go install"
 	go install --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
+		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
 		./cmd/full-tendereum
 
 install_light:
 	@echo "--> Running go install"
 	go install --ldflags '-extldflags "-static"' \
-		--ldflags "-X github.com/cosmos/tendereum/version.GitCommit=`git rev-parse HEAD`" \
+		--ldflags "-X github.com/adrianbrink/tendereum/version.GitCommit=`git rev-parse HEAD`" \
 		./cmd/light-tendereum
 
 
